@@ -49,6 +49,16 @@ internal class BerzerkBundle : IBundle
             }
         }
 
+        if (
+            Config.WhenTargetingPreferredMonster
+            && Game.SelectedEntity is SpawnedMonster preferredMonster
+            && Bundles.Avoidance.PreferMonster(preferredMonster.Rarity)
+        )
+        {
+            Game.Player.EnterBerzerkMode();
+            return;
+        }
+
         if (!Config.BeeingAttackedByAwareMonster)
             return;
 
@@ -71,6 +81,7 @@ internal class BerzerkBundle : IBundle
             SurroundedByMonsters = PlayerConfig.Get<bool>("RSBot.Training.checkBerzerkMonsterAmount"),
             SurroundingMonsterAmount = PlayerConfig.Get<byte>("RSBot.Training.numBerzerkMonsterAmount", 5),
             WhenTargetSpecificRartiyMonster = PlayerConfig.Get<bool>("RSBot.Training.checkBerserkOnMonsterRarity"),
+            WhenTargetingPreferredMonster = PlayerConfig.Get<bool>("RSBot.Training.checkBerzerkPreference"),
         };
     }
 

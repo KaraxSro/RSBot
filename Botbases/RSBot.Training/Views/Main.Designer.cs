@@ -64,6 +64,7 @@
             label4 = new SDUI.Controls.Label();
             checkBerzerkWhenFull = new SDUI.Controls.CheckBox();
             checkBerserkOnMonsterRarity = new SDUI.Controls.CheckBox();
+            checkBerzerkPreference = new SDUI.Controls.CheckBox();
             groupBoxBerserk = new SDUI.Controls.GroupBox();
             label7 = new SDUI.Controls.Label();
             numBerzerkMonsterAmount = new SDUI.Controls.NumUpDown();
@@ -390,10 +391,27 @@
             checkBerserkOnMonsterRarity.Text = "Enter berserk mode when attack specific monster type";
             checkBerserkOnMonsterRarity.UseVisualStyleBackColor = false;
             checkBerserkOnMonsterRarity.CheckedChanged += settings_CheckedChanged;
+            //
+            // checkBerzerkPreference
+            //
+            checkBerzerkPreference.AutoSize = true;
+            checkBerzerkPreference.BackColor = System.Drawing.Color.Transparent;
+            checkBerzerkPreference.Depth = 0;
+            checkBerzerkPreference.Location = new System.Drawing.Point(21, 138);
+            checkBerzerkPreference.Margin = new System.Windows.Forms.Padding(0);
+            checkBerzerkPreference.MouseLocation = new System.Drawing.Point(-1, -1);
+            checkBerzerkPreference.Name = "checkBerzerkPreference";
+            checkBerzerkPreference.Ripple = true;
+            checkBerzerkPreference.Size = new System.Drawing.Size(310, 30);
+            checkBerzerkPreference.TabIndex = 8;
+            checkBerzerkPreference.Text = "Enter berserk mode when targeting a preferred monster";
+            checkBerzerkPreference.UseVisualStyleBackColor = false;
+            checkBerzerkPreference.CheckedChanged += settings_CheckedChanged;
             // 
             // groupBoxBerserk
             // 
             groupBoxBerserk.BackColor = System.Drawing.Color.Transparent;
+            groupBoxBerserk.Controls.Add(checkBerzerkPreference);
             groupBoxBerserk.Controls.Add(label7);
             groupBoxBerserk.Controls.Add(numBerzerkMonsterAmount);
             groupBoxBerserk.Controls.Add(checkBerzerkAvoidance);
@@ -405,7 +423,7 @@
             groupBoxBerserk.Padding = new System.Windows.Forms.Padding(3, 10, 3, 3);
             groupBoxBerserk.Radius = 10;
             groupBoxBerserk.ShadowDepth = 4;
-            groupBoxBerserk.Size = new System.Drawing.Size(478, 150);
+            groupBoxBerserk.Size = new System.Drawing.Size(478, 176);
             groupBoxBerserk.TabIndex = 5;
             groupBoxBerserk.TabStop = false;
             groupBoxBerserk.Text = "Berserk";
@@ -734,7 +752,7 @@
             groupBoxAdvanced.Controls.Add(linkAttackWeakerMobsHelp);
             groupBoxAdvanced.Controls.Add(checkAttackWeakerFirst);
             groupBoxAdvanced.Controls.Add(checkBoxDimensionPillar);
-            groupBoxAdvanced.Location = new System.Drawing.Point(262, 300);
+            groupBoxAdvanced.Location = new System.Drawing.Point(262, 326);
             groupBoxAdvanced.Name = "groupBoxAdvanced";
             groupBoxAdvanced.Padding = new System.Windows.Forms.Padding(3, 8, 3, 3);
             groupBoxAdvanced.Radius = 10;
@@ -846,6 +864,7 @@
         private SDUI.Controls.CheckBox checkCastBuffs;
         private SDUI.Controls.CheckBox checkBerzerkWhenFull;
         private SDUI.Controls.CheckBox checkBerserkOnMonsterRarity;
+        private SDUI.Controls.CheckBox checkBerzerkPreference;
         private SDUI.Controls.ListView lvAvoidance;
         private SDUI.Controls.ContextMenuStrip ctxAvoidance;
         private System.Windows.Forms.ToolStripMenuItem btnAvoid;

@@ -35,4 +35,6 @@ internal class BerzerkConfig
     public bool BeeingAttackedByAwareMonster { get; set; }
 
     public bool WhenTargetSpecificRartiyMonster { get; set; }
+
+    public bool WhenTargetingPreferredMonster { get; set; }
 }
