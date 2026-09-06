@@ -31,7 +31,10 @@ Feel free to explore the codebase, create pull requests for improvements, or ope
 **Prerequisites:**
 
   * [Visual Studio 2026](https://visualstudio.microsoft.com/downloads/)
-  * Workloads: `.NET desktop development`
+  * Workloads:
+    * `.NET desktop development`
+    * `Desktop development with C++`
+  * Individual component: `MSVC v143 - VS 2022 C++ x64/x86 build tools (v14.44-17.14)`
 
 **Build Instructions:**
 
