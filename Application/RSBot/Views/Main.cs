@@ -305,46 +305,6 @@ public partial class Main : UIWindow
     private void Main_Shown(object sender, EventArgs e)
     {
         _isWindowLoaded = true;
-        CheckAndShowDonationReminder();
-    }
-
-    /// <summary>
-    ///     Checks and shows donation reminder if needed (once per day)
-    /// </summary>
-    private void CheckAndShowDonationReminder()
-    {
-        if (GlobalConfig.Get("RSBot.DonationReminderDisabled", false))
-            return;
-
-        var lastShownDateStr = GlobalConfig.Get("RSBot.LastDonationReminderDate", string.Empty);
-        var today = DateTime.Now.ToString("yyyy-MM-dd");
-
-        if (lastShownDateStr == today)
-            return;
-
-        var appUsageCount = GlobalConfig.Get("RSBot.AppUsageCount", 0);
-        GlobalConfig.Set("RSBot.AppUsageCount", appUsageCount + 1);
-        GlobalConfig.Save();
-
-        if (appUsageCount < 3)
-            return;
-
-        Task.Delay(2000).ContinueWith(_ =>
-        {
-            if (InvokeRequired)
-            {
-                Invoke(new Action(() =>
-                {
-                    using var donationDialog = new DonationReminderDialog();
-                    donationDialog.ShowDialog(this);
-                }));
-            }
-            else
-            {
-                using var donationDialog = new DonationReminderDialog();
-                donationDialog.ShowDialog(this);
-            }
-        });
     }
 
     #endregion Methods
@@ -457,7 +417,7 @@ public partial class Main : UIWindow
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
-    private async void Main_Load(object sender, EventArgs e)
+    private void Main_Load(object sender, EventArgs e)
     {
         menuSidebar.Checked = GlobalConfig.Get("RSBot.ShowSidebar", true);
 
@@ -479,12 +439,6 @@ public partial class Main : UIWindow
         menuCurrentProfile.Text = "Profile: " + ProfileManager.SelectedProfile;
 
         EventManager.FireEvent("OnInitialized");
-    
-        using var updater = new Updater();
-        updater.FormClosed += (s, _) => ((Form)s).Dispose();
-
-        if (await updater.Check())
-            updater.Show();
     }
 
     /// <summary>
