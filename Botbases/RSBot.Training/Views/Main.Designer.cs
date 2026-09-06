@@ -90,6 +90,7 @@
             checkBoxDontFollowMobs = new SDUI.Controls.CheckBox();
             linkAttackWeakerMobsHelp = new System.Windows.Forms.LinkLabel();
             checkAttackWeakerFirst = new SDUI.Controls.CheckBox();
+            checkDefendPetFirst = new SDUI.Controls.CheckBox();
             checkBoxDimensionPillar = new SDUI.Controls.CheckBox();
             timerGrabByAbilityPet = new System.Windows.Forms.Timer(components);
             toolTip1 = new System.Windows.Forms.ToolTip(components);
@@ -749,6 +750,7 @@
             // 
             groupBoxAdvanced.BackColor = System.Drawing.Color.Transparent;
             groupBoxAdvanced.Controls.Add(checkBoxDontFollowMobs);
+            groupBoxAdvanced.Controls.Add(checkDefendPetFirst);
             groupBoxAdvanced.Controls.Add(linkAttackWeakerMobsHelp);
             groupBoxAdvanced.Controls.Add(checkAttackWeakerFirst);
             groupBoxAdvanced.Controls.Add(checkBoxDimensionPillar);
@@ -757,7 +759,7 @@
             groupBoxAdvanced.Padding = new System.Windows.Forms.Padding(3, 8, 3, 3);
             groupBoxAdvanced.Radius = 10;
             groupBoxAdvanced.ShadowDepth = 4;
-            groupBoxAdvanced.Size = new System.Drawing.Size(478, 106);
+            groupBoxAdvanced.Size = new System.Drawing.Size(478, 130);
             groupBoxAdvanced.TabIndex = 6;
             groupBoxAdvanced.TabStop = false;
             groupBoxAdvanced.Text = "Advanced";
@@ -767,7 +769,7 @@
             checkBoxDontFollowMobs.AutoSize = true;
             checkBoxDontFollowMobs.BackColor = System.Drawing.Color.Transparent;
             checkBoxDontFollowMobs.Depth = 0;
-            checkBoxDontFollowMobs.Location = new System.Drawing.Point(21, 75);
+            checkBoxDontFollowMobs.Location = new System.Drawing.Point(21, 99);
             checkBoxDontFollowMobs.Margin = new System.Windows.Forms.Padding(0);
             checkBoxDontFollowMobs.MouseLocation = new System.Drawing.Point(-1, -1);
             checkBoxDontFollowMobs.Name = "checkBoxDontFollowMobs";
@@ -804,7 +806,23 @@
             checkAttackWeakerFirst.Text = "If avoided: counter attack weaker mobs first";
             checkAttackWeakerFirst.UseVisualStyleBackColor = false;
             checkAttackWeakerFirst.CheckedChanged += settings_CheckedChanged;
-            // 
+            //
+            // checkDefendPetFirst
+            //
+            checkDefendPetFirst.AutoSize = true;
+            checkDefendPetFirst.BackColor = System.Drawing.Color.Transparent;
+            checkDefendPetFirst.Depth = 0;
+            checkDefendPetFirst.Location = new System.Drawing.Point(21, 75);
+            checkDefendPetFirst.Margin = new System.Windows.Forms.Padding(0);
+            checkDefendPetFirst.MouseLocation = new System.Drawing.Point(-1, -1);
+            checkDefendPetFirst.Name = "checkDefendPetFirst";
+            checkDefendPetFirst.Ripple = true;
+            checkDefendPetFirst.Size = new System.Drawing.Size(218, 30);
+            checkDefendPetFirst.TabIndex = 9;
+            checkDefendPetFirst.Text = "If pet is attacked: defend it first";
+            checkDefendPetFirst.UseVisualStyleBackColor = false;
+            checkDefendPetFirst.CheckedChanged += settings_CheckedChanged;
+            //
             // checkBoxDimensionPillar
             // 
             checkBoxDimensionPillar.AutoSize = true;
@@ -896,6 +914,7 @@
         private SDUI.Controls.GroupBox groupBoxAdvanced;
         private SDUI.Controls.CheckBox checkBoxDimensionPillar;
         private SDUI.Controls.CheckBox checkAttackWeakerFirst;
+        private SDUI.Controls.CheckBox checkDefendPetFirst;
         private System.Windows.Forms.LinkLabel linkAttackWeakerMobsHelp;
         private System.Windows.Forms.LinkLabel linkRecord;
         private System.Windows.Forms.Timer timerGrabByAbilityPet;

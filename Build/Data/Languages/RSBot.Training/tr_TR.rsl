@@ -15,6 +15,7 @@ RSBot.Training.Main.GroupBox.checkBerzerkAvoidance="Uzak durulması gereken cana
 RSBot.Training.Main.GroupBox.checkBerzerkMonsterAmount="Saldıran canavar sayısı"
 RSBot.Training.Main.GroupBox.checkBerzerkWhenFull="Dolu Olduğunda"
 RSBot.Training.Main.GroupBox.checkBerzerkPreference="Tercih edilen bir canavar hedeflendiğinde berzerk moduna gir"
+RSBot.Training.Main.GroupBox.checkDefendPetFirst="Pet saldırıya uğrarsa: önce onu savun"
 RSBot.Training.Main.groupBox3="Kasmaya dön"
 RSBot.Training.Main.groupBox2="Canavar Tercihleri"
 RSBot.Training.Main.groupBox1="Alan"

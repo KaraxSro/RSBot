@@ -17,6 +17,7 @@ RSBot.Training.Main.GroupBox.checkBerzerkAvoidance="Si es atacado por un tipo de
 RSBot.Training.Main.GroupBox.checkBerzerkMonsterAmount="Al ser atacado por más de"
 RSBot.Training.Main.GroupBox.checkBerzerkWhenFull="Usar berzerk cuando esté lleno"
 RSBot.Training.Main.GroupBox.checkBerzerkPreference="Activar berzerk al seleccionar un monstruo preferido"
+RSBot.Training.Main.GroupBox.checkDefendPetFirst="Si atacan a la mascota: defenderla primero"
 RSBot.Training.Main.groupBoxIgnores="Avanzado"
 RSBot.Training.Main.GroupBox.checkBoxDimensionPillar="Ignorar Dimension Pillar"
 RSBot.Training.Main.GroupBox.checkAttackWeakerFirst="Atacar monstruos más débiles primero"

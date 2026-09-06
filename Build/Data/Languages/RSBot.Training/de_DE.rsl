@@ -15,6 +15,7 @@ RSBot.Training.Main.GroupBox.checkBerzerkAvoidance="Wenn Sie von einem Monsterty
 RSBot.Training.Main.GroupBox.checkBerzerkMonsterAmount="Angegriffen von mehr als"
 RSBot.Training.Main.GroupBox.checkBerzerkWhenFull="Benutze Berserk wenn voll"
 RSBot.Training.Main.GroupBox.checkBerzerkPreference="Aktiviere Berserk beim Anvisieren eines bevorzugten Monsters"
+RSBot.Training.Main.GroupBox.checkDefendPetFirst="Wenn das Haustier angegriffen wird: zuerst verteidigen"
 RSBot.Training.Main.groupBox3="Zurück zum training"
 RSBot.Training.Main.groupBox2="Vermeiden"
 RSBot.Training.Main.groupBox1="Bereich"

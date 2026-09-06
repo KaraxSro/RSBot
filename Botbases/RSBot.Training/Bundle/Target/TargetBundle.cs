@@ -70,6 +70,17 @@ internal class TargetBundle : IBundle
             }
         );
 
+        var petAttacker = GetPetAttacker();
+        if (petAttacker != null && Game.SelectedEntity?.UniqueId != petAttacker.UniqueId)
+        {
+            Log.Debug("[TargetBundle] Pet is under attack, switching target to defend it!");
+
+            if (petAttacker.TrySelect())
+                Bundles.Movement.LastEntityWasBehindObstacle = false;
+
+            return;
+        }
+
         var attacker = GetFromCurrentAttackers();
         if (attacker != null && Game.SelectedEntity == null)
         {
@@ -134,6 +145,36 @@ internal class TargetBundle : IBundle
             .OrderBy(e => (byte)e.Rarity)
             .OrderBy(e => e.Record.Level)
             .OrderByDescending(e => e.Position.DistanceToPlayer())
+            .FirstOrDefault();
+    }
+
+    private SpawnedMonster GetPetAttacker()
+    {
+        if (!PlayerConfig.Get<bool>("RSBot.Training.checkDefendPetFirst"))
+            return null;
+
+        var growthId = Game.Player.Growth?.UniqueId ?? 0;
+        var fellowId = Game.Player.Fellow?.UniqueId ?? 0;
+        if (growthId == 0 && fellowId == 0)
+            return null;
+
+        if (
+            !SpawnManager.TryGetEntities<SpawnedMonster>(
+                monster =>
+                    monster.State.LifeState == LifeState.Alive
+                    && (
+                        (growthId != 0 && monster.TargetId == growthId)
+                        || (fellowId != 0 && monster.TargetId == fellowId)
+                    ),
+                out var attackers
+            )
+        )
+            return null;
+
+        return attackers
+            .OrderBy(monster => (byte)monster.Rarity)
+            .ThenBy(monster => monster.Record.Level)
+            .ThenBy(monster => monster.DistanceToPlayer)
             .FirstOrDefault();
     }
 

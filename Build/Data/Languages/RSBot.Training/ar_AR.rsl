@@ -16,6 +16,7 @@ RSBot.Default.Main.GroupBox.checkBerzerkAvoidance="اذا هاجمك وحش من
 RSBot.Default.Main.GroupBox.checkBerzerkMonsterAmount="اذا هاجمك أكثر من"
 RSBot.Default.Main.GroupBox.checkBerzerkWhenFull="تشغيل الزيرك بمجرد الإمتلاء"
 RSBot.Training.Main.GroupBox.checkBerzerkPreference="تفعيل وضع البيرسيرك عند استهداف وحش مفضّل"
+RSBot.Training.Main.GroupBox.checkDefendPetFirst="إذا تعرض الحيوان الأليف للهجوم: دافع عنه أولاً"
 RSBot.Default.Main.groupBox3="العودة لمنطقة التدريب"
 RSBot.Default.Main.groupBox2="تجنب الوحوش"
 RSBot.Default.Main.groupBox1="منطقة البوت"
