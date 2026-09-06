@@ -727,18 +727,19 @@ public static class ShoppingManager
     /// <param name="item">Item to put in storage.</param>
     private static void StoreItem(InventoryItem item, SpawnedBionic npc)
     {
+        var isWarehouse = npc.Record.CodeName.Contains("WAREHOUSE");
+        var storage = isWarehouse ? Game.Player.Storage : Game.Player.GuildStorage;
+
         //Store item
-        byte destinationSlot;
-        if (npc.Record.CodeName.Contains("WAREHOUSE"))
+        var destinationSlot = storage.GetFreeSlot();
+        if (destinationSlot == 0xFF)
         {
-            destinationSlot = Game.Player.Storage.GetFreeSlot();
+            Log.Warn("Cannot store item because the storage is full!");
+            return;
         }
-        else
-        {
-            destinationSlot = Game.Player.GuildStorage.GetFreeSlot();
-        }
+
         var packet = new Packet(0x7034);
-        packet.WriteByte(npc.Record.CodeName.Contains("WAREHOUSE") ? 0x02 : 0x1E); //Store Item Flag (02 - warehouse; 1E - guild)
+        packet.WriteByte(isWarehouse ? 0x02 : 0x1E); //Store Item Flag (02 - warehouse; 1E - guild)
         packet.WriteByte(item.Slot);
         packet.WriteByte(destinationSlot);
         packet.WriteUInt(npc.UniqueId);
@@ -746,6 +747,40 @@ public static class ShoppingManager
         var awaitResult = new AwaitCallback(null, 0xB034);
         PacketManager.SendPacket(packet, PacketDestination.Server, awaitResult);
         awaitResult.AwaitResponse();
+
+        if (!item.Record.IsStackable || item.Record.MaxStack <= 1)
+            return;
+
+        var partialStackSlots = storage
+            .GetItems(existingItem =>
+                existingItem.Slot != destinationSlot
+                && existingItem.ItemId == item.ItemId
+                && existingItem.Amount < existingItem.Record.MaxStack
+            )
+            .OrderBy(existingItem => existingItem.Slot)
+            .Select(existingItem => existingItem.Slot)
+            .ToList();
+
+        foreach (var partialStackSlot in partialStackSlots)
+        {
+            var sourceItem = storage.GetItemAt(destinationSlot);
+            if (sourceItem == null || sourceItem.ItemId != item.ItemId)
+                break;
+
+            var partialStack = storage.GetItemAt(partialStackSlot);
+            if (partialStack == null || partialStack.ItemId != sourceItem.ItemId)
+                continue;
+
+            var freeStackSpace = partialStack.Record.MaxStack - partialStack.Amount;
+            if (freeStackSpace <= 0)
+                continue;
+
+            var mergeAmount = (ushort)Math.Min(sourceItem.Amount, freeStackSpace);
+            if (!storage.MoveItem(sourceItem.Slot, partialStack.Slot, mergeAmount, npc))
+                Log.Warn(
+                    $"Could not merge stored item [{sourceItem.Record.GetRealName()}] from slot [{sourceItem.Slot}] into slot [{partialStack.Slot}]."
+                );
+        }
     }
 
     public static void LoadFilters()
