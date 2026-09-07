@@ -87,6 +87,16 @@ internal class LoopBundle : IBundle
     /// </summary>
     public void Refresh()
     {
+        var reverseDestination = PlayerConfig.GetEnum(
+            "RSBot.Training.ReverseDestination",
+            GuideTeleportType.Death
+        );
+        if (
+            reverseDestination != GuideTeleportType.Death
+            && reverseDestination != GuideTeleportType.Recall
+        )
+            reverseDestination = GuideTeleportType.Death;
+
         Config = new LoopConfig
         {
             WalkScript = PlayerConfig.Get<string>("RSBot.Walkback.File"),
@@ -94,6 +104,7 @@ internal class LoopBundle : IBundle
             UseVehicle = PlayerConfig.Get<bool>("RSBot.Training.checkUseMount", true),
             CastBuffs = PlayerConfig.Get<bool>("RSBot.Training.checkCastBuffs", true),
             UseReverse = PlayerConfig.Get<bool>("RSBot.Training.checkBoxUseReverse", false),
+            ReverseDestination = reverseDestination,
         };
     }
 
@@ -216,7 +227,7 @@ internal class LoopBundle : IBundle
                 _reverseReturnPending = true;
                 _teleportCompletedAt = 0;
 
-                if (item.UseTo(3))
+                if (item.UseTo((byte)Config.ReverseDestination))
                     return;
 
                 _reverseReturnPending = false;

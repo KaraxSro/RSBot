@@ -688,12 +688,17 @@ public partial class Main : DoubleBufferedControl
 
             //var newListItem = (ListViewItem)listItem.Clone();
             //newListItem.Group = listShoppingList.Groups[comboStore.SelectedIndex];
-            var newListItem = new ListViewItem(listItem.Text) { Tag = listItem.Tag };
+            var newListItem = new ListViewItem(listItem.Text)
+            {
+                Name = listItem.Name,
+                Tag = listItem.Tag,
+            };
             newListItem.Group = listShoppingList.Groups[comboStore.SelectedIndex];
             newListItem.SubItems.Add("x" + dialog.Value);
 
             //newListItem.SubItems.Add("x" + dialog.Value);
             listShoppingList.Items.Add(newListItem);
+            newListItem.LoadItemImageAsync(refItem);
         }
 
         SaveShoppingList();

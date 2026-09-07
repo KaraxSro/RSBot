@@ -232,13 +232,14 @@ namespace RSBot.Items.Views
             tabMain.Controls.Add(tabSellFilter);
             tabMain.Controls.Add(tabPage1);
             tabMain.Dock = DockStyle.Fill;
-            tabMain.ItemSize = new Size(80, 24);
+            tabMain.ItemSize = new Size(160, 24);
             tabMain.Location = new Point(0, 0);
             tabMain.Margin = new Padding(4);
             tabMain.Name = "tabMain";
             tabMain.Radius = new Padding(4);
             tabMain.SelectedIndex = 0;
             tabMain.Size = new Size(942, 591);
+            tabMain.SizeMode = TabSizeMode.Fixed;
             tabMain.TabIndex = 7;
             // 
             // tabBuyFilter
@@ -1643,6 +1644,7 @@ namespace RSBot.Items.Views
             // 
             // groupBoxOptions
             // 
+            groupBoxOptions.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             groupBoxOptions.BackColor = Color.Transparent;
             groupBoxOptions.Controls.Add(checkPickupGold);
             groupBoxOptions.Controls.Add(checkAllEquips);
@@ -1763,6 +1765,7 @@ namespace RSBot.Items.Views
             // 
             // groupBoxGeneral
             // 
+            groupBoxGeneral.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             groupBoxGeneral.BackColor = Color.Transparent;
             groupBoxGeneral.Controls.Add(cbDontPickupWhileBotting);
             groupBoxGeneral.Controls.Add(cbJustpickmyitems);
@@ -1781,7 +1784,7 @@ namespace RSBot.Items.Views
             // 
             // cbDontPickupWhileBotting
             // 
-            cbDontPickupWhileBotting.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            cbDontPickupWhileBotting.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             cbDontPickupWhileBotting.AutoSize = true;
             cbDontPickupWhileBotting.BackColor = Color.Transparent;
             cbDontPickupWhileBotting.Depth = 0;
@@ -1814,7 +1817,7 @@ namespace RSBot.Items.Views
             // 
             // checkDontPickupInBerzerk
             // 
-            checkDontPickupInBerzerk.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            checkDontPickupInBerzerk.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             checkDontPickupInBerzerk.AutoSize = true;
             checkDontPickupInBerzerk.BackColor = Color.Transparent;
             checkDontPickupInBerzerk.Depth = 0;

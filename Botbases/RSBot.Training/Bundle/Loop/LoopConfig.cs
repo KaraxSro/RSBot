@@ -35,6 +35,12 @@ public class LoopConfig
     public bool UseReverse { get; set; }
 
     /// <summary>
+    ///     Gets or sets the destination used by reverse return scrolls.
+    /// </summary>
+    public RSBot.Core.Objects.GuideTeleportType ReverseDestination { get; set; } =
+        RSBot.Core.Objects.GuideTeleportType.Death;
+
+    /// <summary>
     ///     Gets or sets a value indicating whether [cast buffs].
     /// </summary>
     /// <value>

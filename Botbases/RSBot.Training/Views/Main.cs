@@ -74,6 +74,14 @@ public partial class Main : DoubleBufferedControl
         foreach (var checkbox in groupBoxWalkback.Controls.OfType<CheckBox>())
             checkbox.Checked = PlayerConfig.Get(key + checkbox.Name, checkbox.Checked);
 
+        var reverseDestination = PlayerConfig.GetEnum(
+            key + "ReverseDestination",
+            GuideTeleportType.Death
+        );
+        radioReverseRecall.Checked = reverseDestination == GuideTeleportType.Recall;
+        radioReverseDeath.Checked = !radioReverseRecall.Checked;
+        UpdateReverseDestinationControls();
+
         radioCenter.Checked = PlayerConfig.Get(key + radioCenter.Name, false);
         radioWalkAround.Checked = PlayerConfig.Get(key + radioWalkAround.Name, true);
 
@@ -99,6 +107,11 @@ public partial class Main : DoubleBufferedControl
         foreach (var checkbox in groupBoxWalkback.Controls.OfType<CheckBox>())
             PlayerConfig.Set(key + checkbox.Name, checkbox.Checked);
 
+        PlayerConfig.Set(
+            key + "ReverseDestination",
+            radioReverseRecall.Checked ? GuideTeleportType.Recall : GuideTeleportType.Death
+        );
+
         PlayerConfig.Set(key + radioCenter.Name, radioCenter.Checked);
         PlayerConfig.Set(key + radioWalkAround.Name, radioWalkAround.Checked);
     }
@@ -110,8 +123,16 @@ public partial class Main : DoubleBufferedControl
     /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
     private void settings_CheckedChanged(object sender, EventArgs e)
     {
+        UpdateReverseDestinationControls();
+
         if (_settingsLoaded)
             ApplySettings();
+    }
+
+    private void UpdateReverseDestinationControls()
+    {
+        radioReverseDeath.Enabled = checkBoxUseReverse.Checked;
+        radioReverseRecall.Enabled = checkBoxUseReverse.Checked;
     }
 
     /// <summary>

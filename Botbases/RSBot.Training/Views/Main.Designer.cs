@@ -56,6 +56,8 @@
             btnRemove = new SDUI.Controls.Button();
             linkRecord = new System.Windows.Forms.LinkLabel();
             checkBoxUseReverse = new SDUI.Controls.CheckBox();
+            radioReverseDeath = new SDUI.Controls.Radio();
+            radioReverseRecall = new SDUI.Controls.Radio();
             checkUseSpeedDrug = new SDUI.Controls.CheckBox();
             checkCastBuffs = new SDUI.Controls.CheckBox();
             checkUseMount = new SDUI.Controls.CheckBox();
@@ -206,6 +208,8 @@
             groupBoxWalkback.Controls.Add(btnRemove);
             groupBoxWalkback.Controls.Add(linkRecord);
             groupBoxWalkback.Controls.Add(checkBoxUseReverse);
+            groupBoxWalkback.Controls.Add(radioReverseDeath);
+            groupBoxWalkback.Controls.Add(radioReverseRecall);
             groupBoxWalkback.Controls.Add(checkUseSpeedDrug);
             groupBoxWalkback.Controls.Add(checkCastBuffs);
             groupBoxWalkback.Controls.Add(checkUseMount);
@@ -217,7 +221,7 @@
             groupBoxWalkback.Padding = new System.Windows.Forms.Padding(3, 10, 3, 3);
             groupBoxWalkback.Radius = 10;
             groupBoxWalkback.ShadowDepth = 4;
-            groupBoxWalkback.Size = new System.Drawing.Size(478, 117);
+            groupBoxWalkback.Size = new System.Drawing.Size(478, 157);
             groupBoxWalkback.TabIndex = 2;
             groupBoxWalkback.TabStop = false;
             groupBoxWalkback.Text = "Back to training";
@@ -252,7 +256,7 @@
             checkBoxUseReverse.AutoSize = true;
             checkBoxUseReverse.BackColor = System.Drawing.Color.Transparent;
             checkBoxUseReverse.Depth = 0;
-            checkBoxUseReverse.Location = new System.Drawing.Point(373, 80);
+            checkBoxUseReverse.Location = new System.Drawing.Point(258, 80);
             checkBoxUseReverse.Margin = new System.Windows.Forms.Padding(0);
             checkBoxUseReverse.MouseLocation = new System.Drawing.Point(-1, -1);
             checkBoxUseReverse.Name = "checkBoxUseReverse";
@@ -262,6 +266,34 @@
             checkBoxUseReverse.Text = "Use Reverse";
             checkBoxUseReverse.UseVisualStyleBackColor = false;
             checkBoxUseReverse.CheckedChanged += settings_CheckedChanged;
+            //
+            // radioReverseDeath
+            //
+            radioReverseDeath.AutoSize = true;
+            radioReverseDeath.Checked = true;
+            radioReverseDeath.Enabled = false;
+            radioReverseDeath.Location = new System.Drawing.Point(286, 103);
+            radioReverseDeath.Margin = new System.Windows.Forms.Padding(0);
+            radioReverseDeath.Name = "radioReverseDeath";
+            radioReverseDeath.Ripple = true;
+            radioReverseDeath.Size = new System.Drawing.Size(139, 30);
+            radioReverseDeath.TabIndex = 9;
+            radioReverseDeath.TabStop = true;
+            radioReverseDeath.Text = "Last death position";
+            radioReverseDeath.CheckedChanged += settings_CheckedChanged;
+            //
+            // radioReverseRecall
+            //
+            radioReverseRecall.AutoSize = true;
+            radioReverseRecall.Enabled = false;
+            radioReverseRecall.Location = new System.Drawing.Point(286, 126);
+            radioReverseRecall.Margin = new System.Windows.Forms.Padding(0);
+            radioReverseRecall.Name = "radioReverseRecall";
+            radioReverseRecall.Ripple = true;
+            radioReverseRecall.Size = new System.Drawing.Size(181, 30);
+            radioReverseRecall.TabIndex = 10;
+            radioReverseRecall.Text = "Last return scroll position";
+            radioReverseRecall.CheckedChanged += settings_CheckedChanged;
             // 
             // checkUseSpeedDrug
             // 
@@ -270,7 +302,7 @@
             checkUseSpeedDrug.Checked = true;
             checkUseSpeedDrug.CheckState = System.Windows.Forms.CheckState.Checked;
             checkUseSpeedDrug.Depth = 0;
-            checkUseSpeedDrug.Location = new System.Drawing.Point(258, 80);
+            checkUseSpeedDrug.Location = new System.Drawing.Point(18, 126);
             checkUseSpeedDrug.Margin = new System.Windows.Forms.Padding(0);
             checkUseSpeedDrug.MouseLocation = new System.Drawing.Point(-1, -1);
             checkUseSpeedDrug.Name = "checkUseSpeedDrug";
@@ -288,7 +320,7 @@
             checkCastBuffs.Checked = true;
             checkCastBuffs.CheckState = System.Windows.Forms.CheckState.Checked;
             checkCastBuffs.Depth = 0;
-            checkCastBuffs.Location = new System.Drawing.Point(169, 80);
+            checkCastBuffs.Location = new System.Drawing.Point(18, 103);
             checkCastBuffs.Margin = new System.Windows.Forms.Padding(0);
             checkCastBuffs.MouseLocation = new System.Drawing.Point(-1, -1);
             checkCastBuffs.Name = "checkCastBuffs";
@@ -419,7 +451,7 @@
             groupBoxBerserk.Controls.Add(checkBerzerkMonsterAmount);
             groupBoxBerserk.Controls.Add(checkBerzerkWhenFull);
             groupBoxBerserk.Controls.Add(checkBerserkOnMonsterRarity);
-            groupBoxBerserk.Location = new System.Drawing.Point(262, 144);
+            groupBoxBerserk.Location = new System.Drawing.Point(262, 178);
             groupBoxBerserk.Name = "groupBoxBerserk";
             groupBoxBerserk.Padding = new System.Windows.Forms.Padding(3, 10, 3, 3);
             groupBoxBerserk.Radius = 10;
@@ -754,7 +786,7 @@
             groupBoxAdvanced.Controls.Add(linkAttackWeakerMobsHelp);
             groupBoxAdvanced.Controls.Add(checkAttackWeakerFirst);
             groupBoxAdvanced.Controls.Add(checkBoxDimensionPillar);
-            groupBoxAdvanced.Location = new System.Drawing.Point(262, 326);
+            groupBoxAdvanced.Location = new System.Drawing.Point(262, 360);
             groupBoxAdvanced.Name = "groupBoxAdvanced";
             groupBoxAdvanced.Padding = new System.Windows.Forms.Padding(3, 8, 3, 3);
             groupBoxAdvanced.Radius = 10;
@@ -909,6 +941,8 @@
         private SDUI.Controls.TextBox txtYCoord;
         private SDUI.Controls.TextBox txtXCoord;
         private SDUI.Controls.CheckBox checkBoxUseReverse;
+        private SDUI.Controls.Radio radioReverseDeath;
+        private SDUI.Controls.Radio radioReverseRecall;
         private SDUI.Controls.Button buttonSelectTrainingArea;
         private SDUI.Controls.Radio radioStand;
         private SDUI.Controls.GroupBox groupBoxAdvanced;
