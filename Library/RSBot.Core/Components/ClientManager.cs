@@ -407,8 +407,7 @@ public partial class ClientManager
 
         try
         {
-            if (_process != null && _process.MainWindowHandle != IntPtr.Zero)
-                _process.Kill();
+            _process.Kill();
         }
         catch (Exception ex)
         {

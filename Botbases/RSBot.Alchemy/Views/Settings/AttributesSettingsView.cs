@@ -17,6 +17,7 @@ namespace RSBot.Alchemy.Views.Settings;
 public partial class AttributesSettingsView : DoubleBufferedControl
 {
     private List<AttributeInfoPanel> _attributePanels;
+    private bool _mainFormEventsSubscribed;
 
     public AttributesSettingsView()
     {
@@ -24,7 +25,7 @@ public partial class AttributesSettingsView : DoubleBufferedControl
 
         CheckForIllegalCrossThreadCalls = false;
 
-        EventManager.SubscribeEvent("OnEnterGame", SubscribeMainFormEvents);
+        EventManager.SubscribeEvent("OnLoadCharacter", SubscribeMainFormEvents);
     }
 
     internal AttributeBundleConfig BundleConfig
@@ -64,11 +65,12 @@ public partial class AttributesSettingsView : DoubleBufferedControl
     /// </summary>
     private void SubscribeMainFormEvents()
     {
-        if (Globals.View != null)
-        {
-            Globals.View.ItemChanged += View_ItemChanged;
-            Globals.View.EngineChanged += View_EngineChanged;
-        }
+        if (Globals.View == null || _mainFormEventsSubscribed)
+            return;
+
+        Globals.View.ItemChanged += View_ItemChanged;
+        Globals.View.EngineChanged += View_EngineChanged;
+        _mainFormEventsSubscribed = true;
     }
 
     public void PopulateView()

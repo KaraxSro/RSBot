@@ -1,5 +1,4 @@
-﻿using System.Threading;
-using RSBot.Core;
+﻿using RSBot.Core;
 using RSBot.Core.Components;
 using RSBot.Core.Objects.Spawn;
 
@@ -74,21 +73,18 @@ internal class MovementBundle : IBundle
 
         Log.Status("Walking around");
 
-        //Find a not colliding position. Do it in a while loop to prevent the bot from processing it in the next cycle (tick).
-        //This is how we can find our next position very fast instead of waiting for the next circle to come.
-        var destination = Container.Bot.Area.GetRandomPosition();
-
-        var attempt = 0;
-        while (Game.Player.Position.HasCollisionBetween(destination) && distance < Container.Bot.Area.Radius)
+        const int maxDestinationAttempts = 6;
+        for (var attempt = 0; attempt < maxDestinationAttempts; attempt++)
         {
-            destination = Container.Bot.Area.GetRandomPosition();
-            if (attempt++ > 3)
-                break;
-
-            Thread.Sleep(100);
+            var destination = Container.Bot.Area.GetRandomPosition();
+            if (distance >= Container.Bot.Area.Radius || !Game.Player.Position.HasCollisionBetween(destination))
+            {
+                Game.Player.MoveTo(destination, false);
+                return;
+            }
         }
 
-        Game.Player.MoveTo(destination, false);
+        Log.Debug($"Could not find a collision-free random position after {maxDestinationAttempts} attempts.");
     }
 
     /// <summary>

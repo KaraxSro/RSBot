@@ -10,6 +10,8 @@ namespace RSBot.Core.Components;
 
 public class PickupManager
 {
+    private const int ACTION_WAIT_TIMEOUT = 5_000;
+
     /// <summary>
     ///     Gets or sets a value indicating whether this <see cref="PickupManager" /> is running.
     /// </summary>
@@ -133,8 +135,16 @@ public class PickupManager
                 if (!RunningPlayerPickup)
                     return;
 
-                while (Game.Player.InAction)
+                var actionWaitStarted = Kernel.TickCount;
+                while (
+                    Game.Player.InAction
+                    && RunningPlayerPickup
+                    && Kernel.TickCount - actionWaitStarted < ACTION_WAIT_TIMEOUT
+                )
                     Thread.Sleep(50);
+
+                if (Game.Player.InAction || !RunningPlayerPickup)
+                    return;
 
                 if (item.Record.IsSpecialtyGoodBox && Game.Player.Job2SpecialtyBag.Full)
                     continue;

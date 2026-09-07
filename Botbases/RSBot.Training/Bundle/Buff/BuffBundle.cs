@@ -19,9 +19,9 @@ internal class BuffBundle : IBundle
         if (_invoked)
             return;
 
-        if ((Game.Player.Untouchable || Game.Player.InAction) && !_buffBetweenAttacks)
+        if (Game.Player.Untouchable || Game.Player.InAction || SkillManager.CastPending)
             return;
-        if ((Game.Player.Untouchable || Game.Player.Berzerking) && _buffBetweenAttacks)
+        if (Game.Player.Berzerking && _buffBetweenAttacks)
             return;
 
         try
@@ -75,7 +75,8 @@ internal class BuffBundle : IBundle
 
                 Log.Debug($"Trying to cast buff: {buff} {buff.Record.Basic_Code}");
 
-                buff.Cast(buff: true);
+                SkillManager.CastBuff(buff, awaitBuffResponse: false);
+                break;
             }
         }
         finally

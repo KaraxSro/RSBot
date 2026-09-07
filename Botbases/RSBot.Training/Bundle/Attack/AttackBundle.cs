@@ -6,6 +6,8 @@ namespace RSBot.Training.Bundle.Attack;
 
 internal class AttackBundle : IBundle
 {
+    private const int ATTACK_DECISION_INTERVAL = 100;
+
     /// <summary>
     ///     The last tick count for checking func call
     /// </summary>
@@ -52,20 +54,28 @@ internal class AttackBundle : IBundle
             return;
         }
 
+        if (SkillManager.CastPending)
+            return;
+
         if (
             SkillManager.ImbueSkill != null
             && !Game.Player.State.HasActiveBuff(SkillManager.ImbueSkill, out _)
             && SkillManager.ImbueSkill.CanBeCasted
         )
-            SkillManager.ImbueSkill.Cast(buff: true);
+        {
+            SkillManager.CastBuff(SkillManager.ImbueSkill, awaitBuffResponse: false);
+            return;
+        }
 
-        if (Kernel.TickCount - _lastTick < 500)
+        // A non-basic action must finish before another combat skill request is sent.
+        // Imbue is handled above because it can be refreshed without interrupting the current action.
+        if (Game.Player.InAction && !SkillManager.IsLastCastedBasic)
+            return;
+
+        if (Kernel.TickCount - _lastTick < ATTACK_DECISION_INTERVAL)
             return;
 
         _lastTick = Kernel.TickCount;
-
-        //if (Game.Player.InAction && !SkillManager.IsLastCastedBasic)
-        //  return;
 
         var useTeleportSkill = PlayerConfig.Get("RSBot.Skills.checkUseTeleportSkill", false);
         if (useTeleportSkill && CastTeleportation())
@@ -92,7 +102,10 @@ internal class AttackBundle : IBundle
         }
 
         if (Game.Player.InAction && SkillManager.IsLastCastedBasic)
+        {
             SkillManager.CancelAction();
+            return;
+        }
 
         var uniqueId = Game.SelectedEntity?.UniqueId;
         if (uniqueId == null)
@@ -111,7 +124,7 @@ internal class AttackBundle : IBundle
 
     public void Stop()
     {
-        //Nothing to do
+        _lastTick = Kernel.TickCount;
     }
 
     /// <summary>

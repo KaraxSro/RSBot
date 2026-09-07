@@ -35,6 +35,8 @@ internal class ActionSkillCastResponse : IPacketHandler
         {
             var errorCode = packet.ReadByte();
 
+            SkillManager.RejectCastRequest();
+
             switch (errorCode)
             {
                 case 0x0C:
@@ -120,6 +122,7 @@ internal class ActionSkillCastResponse : IPacketHandler
                 skillInfo = SkillManager.Buffs.Find(p => p.Id == action.SkillId);
 
             skillInfo?.Update();
+            SkillManager.CompleteCastRequest(action.SkillId);
 
             EventManager.FireEvent("OnCastSkill", action.SkillId);
 

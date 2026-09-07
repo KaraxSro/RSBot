@@ -1,5 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Linq;
 using RSBot.Core;
 using RSBot.Core.Event;
 
@@ -7,8 +7,11 @@ namespace RSBot.Inventory.Subscriber;
 
 internal class UseItemAtTrainplaceSubscriber
 {
-    private static readonly List<string> _blacklistedItems = new();
-    private static long _lastTick;
+    private const int SCAN_INTERVAL = 1_000;
+    private const int RETRY_DELAY = 5 * 60 * 1_000;
+
+    private static readonly Dictionary<string, int> _blacklistedItems = new();
+    private static int _lastScanTick;
 
     public static void SubscribeEvents()
     {
@@ -17,11 +20,18 @@ internal class UseItemAtTrainplaceSubscriber
 
     private static void OnTick()
     {
-        //Retry blacklisted items after 5 minutes
-        if (TimeSpan.FromMilliseconds(Kernel.TickCount - _lastTick).Minutes >= 5)
-            _blacklistedItems.Clear();
+        if (Kernel.TickCount - _lastScanTick < SCAN_INTERVAL)
+            return;
 
-        _lastTick = Kernel.TickCount;
+        _lastScanTick = Kernel.TickCount;
+
+        foreach (
+            var expiredItem in _blacklistedItems
+                .Where(entry => Kernel.TickCount - entry.Value >= RETRY_DELAY)
+                .Select(entry => entry.Key)
+                .ToArray()
+        )
+            _blacklistedItems.Remove(expiredItem);
 
         if (!Kernel.Bot.Running || Kernel.Bot.Botbase.Area.Position.Region == 0)
             return;
@@ -34,7 +44,7 @@ internal class UseItemAtTrainplaceSubscriber
 
         foreach (var item in itemsToUse)
         {
-            if (_blacklistedItems.Contains(item))
+            if (_blacklistedItems.ContainsKey(item))
                 continue;
 
             var invItem = Game.Player.Inventory.GetItem(item);
@@ -50,7 +60,7 @@ internal class UseItemAtTrainplaceSubscriber
                 continue;
 
             //e.g. overlapping with another buff
-            _blacklistedItems.Add(invItem.Record.CodeName);
+            _blacklistedItems[invItem.Record.CodeName] = Kernel.TickCount;
 
             Log.Warn(
                 $"Can not use item [{invItem.Record.GetRealName()}] at training place. Blacklisting it for 5 minutes before next try."

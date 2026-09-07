@@ -11,6 +11,8 @@ namespace RSBot.Lure.Bundle;
 
 internal static class MovementBundle
 {
+    private const int MAX_DESTINATION_ATTEMPTS = 12;
+
     public static void Tick()
     {
         if (
@@ -70,9 +72,24 @@ internal static class MovementBundle
             return;
 
         var minDistance = LureConfig.Area.Radius / 1.5f;
-        var destination = LureConfig.Area.GetRandomPosition();
-        while (destination.DistanceToPlayer() < minDistance || Game.Player.Position.HasCollisionBetween(destination))
-            destination = LureConfig.Area.GetRandomPosition();
+        var destination = default(Position);
+        var destinationFound = false;
+        for (var attempt = 0; attempt < MAX_DESTINATION_ATTEMPTS; attempt++)
+        {
+            var candidate = LureConfig.Area.GetRandomPosition();
+            if (candidate.DistanceToPlayer() < minDistance || Game.Player.Position.HasCollisionBetween(candidate))
+                continue;
+
+            destination = candidate;
+            destinationFound = true;
+            break;
+        }
+
+        if (!destinationFound)
+        {
+            Log.Debug($"[Lure] Could not find a collision-free random position after {MAX_DESTINATION_ATTEMPTS} attempts.");
+            return;
+        }
 
         Log.Status("Walking to random position...");
         Log.Debug(

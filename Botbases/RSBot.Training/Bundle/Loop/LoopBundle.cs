@@ -8,6 +8,11 @@ namespace RSBot.Training.Bundle.Loop;
 
 internal class LoopBundle : IBundle
 {
+    private const int REVERSE_RETURN_SETTLE_TIME = 2_000;
+
+    private volatile bool _reverseReturnPending;
+    private volatile int _reverseReturnCompletedAt;
+
     /// <summary>
     ///     Gets the configuration.
     /// </summary>
@@ -31,6 +36,29 @@ internal class LoopBundle : IBundle
     ///     <c>true</c> if [townscript running]; otherwise, <c>false</c>.
     /// </value>
     public bool TownscriptRunning { get; private set; }
+
+    /// <summary>
+    ///     Gets a value indicating whether the bot should wait for a reverse return teleport to settle.
+    /// </summary>
+    public bool WaitingForReverseReturn
+    {
+        get
+        {
+            if (!_reverseReturnPending)
+                return false;
+
+            if (_reverseReturnCompletedAt == 0)
+                return true;
+
+            if (Kernel.TickCount - _reverseReturnCompletedAt < REVERSE_RETURN_SETTLE_TIME)
+                return true;
+
+            _reverseReturnPending = false;
+            _reverseReturnCompletedAt = 0;
+
+            return false;
+        }
+    }
 
     /// <summary>
     ///     Invokes this instance.
@@ -76,7 +104,18 @@ internal class LoopBundle : IBundle
         if (ShoppingManager.Running)
             ShoppingManager.Stop();
 
+        _reverseReturnPending = false;
+        _reverseReturnCompletedAt = 0;
         Running = false;
+    }
+
+    /// <summary>
+    ///     Marks the reverse return teleport as completed and starts the position settling period.
+    /// </summary>
+    public void OnTeleportComplete()
+    {
+        if (_reverseReturnPending)
+            _reverseReturnCompletedAt = Kernel.TickCount;
     }
 
     /// <summary>
@@ -131,6 +170,7 @@ internal class LoopBundle : IBundle
             var filter = new TypeIdFilter(3, 3, 3, 3);
             var item = Game.Player.Inventory.GetItem(filter);
             if (item != null)
+            {
                 /*
                     2 => go to last recall point
                     3 => go to last died position
@@ -140,11 +180,18 @@ internal class LoopBundle : IBundle
                         85: Cannot find the place where you selected as recall point.
                         86: Cannot find the place where you died.
                  */
+                _reverseReturnPending = true;
+                _reverseReturnCompletedAt = 0;
+
                 if (item.UseTo(3))
                 {
                     TownscriptRunning = false;
                     return;
                 }
+
+                _reverseReturnPending = false;
+                _reverseReturnCompletedAt = 0;
+            }
         }
 
         TownscriptRunning = false;

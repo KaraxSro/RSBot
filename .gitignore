@@ -33,17 +33,7 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
-[Bb]uild/*
-![Bb]uild/Data/
-[Bb]uild/Data/*
-
-[Bb]uild/Data/Scripts/*
-![Bb]uild/Data/Scripts/
-![Bb]uild/Data/Languages/
-![Bb]uild/Data/Scripts/Towns/
-
-![Bb]uild/Data/Languages/**
-![Bb]uild/Data/Scripts/Towns/**
+[Bb]uild/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/

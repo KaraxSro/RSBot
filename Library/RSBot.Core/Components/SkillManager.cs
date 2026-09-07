@@ -13,6 +13,8 @@ namespace RSBot.Core.Components;
 
 public static class SkillManager
 {
+    private const int CAST_REJECTION_BACKOFF = 750;
+
     /// <summary>
     ///     Get the skill using index
     /// </summary>
@@ -22,6 +24,10 @@ public static class SkillManager
     ///     The last casted skill id
     /// </summary>
     public static uint LastCastedSkillId;
+
+    private static volatile uint _pendingSkillId;
+    private static volatile int _pendingSkillTick;
+    private static volatile int _pendingSkillTimeout;
 
     /// <summary>
     ///     Basic skills
@@ -76,6 +82,24 @@ public static class SkillManager
     public static bool IsLastCastedBasic => _baseSkills.Contains(LastCastedSkillId);
 
     /// <summary>
+    ///     Gets whether a skill request is waiting for the server to accept or reject it.
+    /// </summary>
+    public static bool CastPending
+    {
+        get
+        {
+            if (_pendingSkillId == 0)
+                return false;
+
+            if (Kernel.TickCount - _pendingSkillTick < _pendingSkillTimeout)
+                return true;
+
+            _pendingSkillId = 0;
+            return false;
+        }
+    }
+
+    /// <summary>
     ///     Initializes this instance.
     /// </summary>
     internal static void Initialize()
@@ -102,7 +126,56 @@ public static class SkillManager
     /// <param name="skillId">The casted skill id</param>
     private static void OnCastSkill(uint skillId)
     {
+        // Imbue is an overlay for the current combat action. It must not replace the last combat skill,
+        // otherwise an active basic attack can no longer be recognized and interrupted for the next skill.
+        if (ImbueSkill?.Id == skillId)
+            return;
+
         LastCastedSkillId = skillId;
+    }
+
+    /// <summary>
+    ///     Completes the pending request after the server accepted the cast.
+    /// </summary>
+    public static void CompleteCastRequest(uint skillId)
+    {
+        if (_pendingSkillId == skillId)
+        {
+            // Keep a short guard after acceptance so the action-state packet can arrive
+            // before the next training tick considers another skill.
+            _pendingSkillTick = Kernel.TickCount;
+            _pendingSkillTimeout = 250;
+        }
+    }
+
+    /// <summary>
+    ///     Releases and briefly backs off the last request after a server rejection.
+    /// </summary>
+    public static void RejectCastRequest()
+    {
+        var rejectedSkillId = _pendingSkillId;
+        _pendingSkillId = 0;
+
+        if (rejectedSkillId == 0)
+            return;
+
+        var skill = Game.Player?.Skills?.GetSkillInfoById(rejectedSkillId);
+        skill ??= Buffs?.Find(candidate => candidate.Id == rejectedSkillId);
+        skill?.DeferRetry(CAST_REJECTION_BACKOFF);
+    }
+
+    private static void BeginCastRequest(SkillInfo skill)
+    {
+        _pendingSkillId = skill.Id;
+        _pendingSkillTick = Kernel.TickCount;
+        _pendingSkillTimeout = Math.Clamp(
+            skill.Record.Action_PreparingTime
+                + skill.Record.Action_CastingTime
+                + skill.Record.Action_ActionDuration
+                + 1_000,
+            1_000,
+            10_000
+        );
     }
 
     /// <summary>
@@ -301,6 +374,7 @@ public static class SkillManager
             $"Skill Attacking to: {targetId} State: {entity.State.LifeState} Health: {entity.Health} HasHealth: {entity.HasHealth} Dst: {Math.Round(entity.DistanceToPlayer, 1)}"
         );
 
+        BeginCastRequest(skill);
         PacketManager.SendPacket(packet, PacketDestination.Server);
 
         return true;
@@ -412,7 +486,7 @@ public static class SkillManager
     /// <param name="skillId">The skill identifier.</param>
     public static void CastBuff(SkillInfo skill, uint target = 0, bool awaitBuffResponse = true)
     {
-        if (skill.Id == 0)
+        if (skill == null || skill.Id == 0)
             return;
 
         /*
@@ -463,6 +537,7 @@ public static class SkillManager
             0xB074
         );
 
+        BeginCastRequest(skill);
         PacketManager.SendPacket(packet, PacketDestination.Server, asyncCallback, callback);
 
         if (awaitBuffResponse)
@@ -523,6 +598,7 @@ public static class SkillManager
             0xB074
         );
 
+        BeginCastRequest(skill);
         PacketManager.SendPacket(packet, PacketDestination.Server, callback);
 
         if (skill.Record.Basic_Activity != 1)

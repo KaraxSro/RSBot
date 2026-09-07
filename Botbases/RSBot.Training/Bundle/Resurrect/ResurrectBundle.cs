@@ -17,6 +17,9 @@ internal class ResurrectBundle : IBundle
         if (Game.Party == null || Game.Party.Members == null || Game.Player.HasActiveVehicle)
             return;
 
+        if (Game.Player.InAction || SkillManager.CastPending)
+            return;
+
         if (!PlayerConfig.Get<bool>("RSBot.Skills.checkResurrectParty"))
             return;
 
@@ -56,7 +59,14 @@ internal class ResurrectBundle : IBundle
                 continue;
 
             Log.Status($"Resurrecting player {member.Name}");
-            SkillManager.ResurrectionSkill?.Cast(member.Player?.UniqueId ?? member.MemberId, true);
+            if (SkillManager.ResurrectionSkill != null)
+                SkillManager.CastBuff(
+                    SkillManager.ResurrectionSkill,
+                    member.Player?.UniqueId ?? member.MemberId,
+                    false
+                );
+
+            return;
         }
     }
 

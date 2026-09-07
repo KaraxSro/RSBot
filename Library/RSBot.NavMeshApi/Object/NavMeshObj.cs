@@ -10,6 +10,8 @@ namespace RSBot.NavMeshApi.Object;
 
 public class NavMeshObj : NavMesh
 {
+    private const int MAX_RAYCAST_ITERATIONS = 500;
+
     public override NavMeshType Type => NavMeshType.Object;
 
     public string Name { get; private set; }
@@ -298,12 +300,8 @@ public class NavMeshObj : NavMesh
         var line = new LineF(src.Offset, dst.Offset);
         var localLine = (instance.WorldToLocal).MultiplyLine(line);
 
-        int raycastCount = 0;
-        while (true)
+        for (var raycastCount = 0; raycastCount < MAX_RAYCAST_ITERATIONS; raycastCount++)
         {
-            //if (raycastCount++ > 100)
-            //throw new Exception("raycastCount (obj) above 100");
-
             if (curCell == dst.Cell)
             {
                 hit = null;
@@ -491,5 +489,9 @@ public class NavMeshObj : NavMesh
             prevCell = curCell;
             curCell = remoteCell;
         }
+
+        Debug.WriteLine($"[Warning] Object raycast exceeded {MAX_RAYCAST_ITERATIONS} cell transitions.");
+        hit = null;
+        return NavMeshRaycastResult.Collision;
     }
 }

@@ -12,6 +12,7 @@ namespace RSBot.NavMeshApi;
 public static class NavMeshManager
 {
     private const int NORMAL_CACHE_SIZE = 256;
+    private const int MAX_RAYCAST_TRANSITIONS = 128;
 
     private static IFileSystem _dataFileSystem;
 
@@ -65,13 +66,8 @@ public static class NavMeshManager
             return false;
         }
 
-        int raycastCount = 0;
-        while (true)
+        for (var transitionCount = 0; transitionCount < MAX_RAYCAST_TRANSITIONS; transitionCount++)
         {
-            raycastCount++;
-            //if (raycastCount > 100)
-            //throw new Exception("raycastCount above 100");
-
             // Move destination into the same region space as source.
             if (dst.Region != src.Region)
             {
@@ -94,6 +90,10 @@ public static class NavMeshManager
                     return false;
             }
         }
+
+        Debug.WriteLine($"[Warning] Raycast exceeded {MAX_RAYCAST_TRANSITIONS} navmesh transitions.");
+        hit = null;
+        return false;
     }
 
     public static bool Raycast(NavMeshTransform src, NavMeshTransform dst, NavMeshRaycastType type) =>

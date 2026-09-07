@@ -25,6 +25,11 @@ public class SkillInfo
     private int _testTick;
 
     /// <summary>
+    ///     Short client-side backoff after the server rejected a cast request.
+    /// </summary>
+    private int _retryAfterTick;
+
+    /// <summary>
     ///     Gets or sets the enabled.
     /// </summary>
     public bool Enabled;
@@ -150,6 +155,9 @@ public class SkillInfo
     {
         get
         {
+            if (_retryAfterTick != 0 && Kernel.TickCount < _retryAfterTick)
+                return false;
+
             if (HasCooldown)
                 return false;
 
@@ -268,12 +276,21 @@ public class SkillInfo
     }
 
     /// <summary>
+    ///     Prevents immediately resending a cast that the server has just rejected.
+    /// </summary>
+    public void DeferRetry(int milliseconds)
+    {
+        _retryAfterTick = Kernel.TickCount + Math.Max(1, milliseconds);
+    }
+
+    /// <summary>
     ///     Reset the ticks
     /// </summary>
     public void Reset()
     {
         //_cooldownTick = 0;
         _lastCastTick = 0;
+        _retryAfterTick = 0;
         Token = 0;
     }
 

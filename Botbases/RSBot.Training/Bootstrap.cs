@@ -49,8 +49,12 @@ public class Bootstrap : IBotbase
         if (Game.Player.State.LifeState == LifeState.Dead)
             return;
 
+        if (Bundles.Loop.WaitingForReverseReturn)
+            return;
+
         //Begin the loopback if needed
-        if (Container.Bot.Area.Position.DistanceToPlayer() > 80)
+        var loopbackDistance = Math.Max(80, Container.Bot.Area.Radius);
+        if (Container.Bot.Area.Position.DistanceToPlayer() > loopbackDistance)
             Bundles.Loop.Start();
 
         if (Bundles.Loop.Running)

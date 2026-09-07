@@ -38,6 +38,7 @@
     <ItemGroup>
       <DependencyFiles Include="..\..\Dependencies\**\*.*" />
     </ItemGroup>
-    <Copy SourceFiles="@(DependencyFiles)" DestinationFolder="..\..\Build\Data\%(RecursiveDir)" />
+    <Error Condition="'@(DependencyFiles)' == ''" Text="No runtime dependencies were found in the Dependencies directory." />
+    <Copy SourceFiles="@(DependencyFiles)" DestinationFolder="..\..\Build\Data\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

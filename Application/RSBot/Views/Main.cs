@@ -537,6 +537,7 @@ public partial class Main : UIWindow
         {
             GlobalConfig.Save();
             PlayerConfig.Save();
+            ClientManager.Kill();
 
             Environment.Exit(0);
         }
@@ -583,6 +584,7 @@ public partial class Main : UIWindow
         {
             GlobalConfig.Save();
             PlayerConfig.Save();
+            ClientManager.Kill();
 
             Environment.Exit(0);
         }

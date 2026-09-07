@@ -23,6 +23,7 @@ public partial class MagicOptionsSettingsView : DoubleBufferedControl
     #region Members
 
     private bool _reloadConfig;
+    private bool _mainFormEventsSubscribed;
 
     #endregion Members
 
@@ -37,7 +38,7 @@ public partial class MagicOptionsSettingsView : DoubleBufferedControl
 
         InitializeComponent();
 
-        EventManager.SubscribeEvent("OnEnterGame", SubscribeMainFormEvents);
+        EventManager.SubscribeEvent("OnLoadCharacter", SubscribeMainFormEvents);
     }
 
     #endregion Constructor
@@ -57,11 +58,12 @@ public partial class MagicOptionsSettingsView : DoubleBufferedControl
     /// </summary>
     private void SubscribeMainFormEvents()
     {
-        if (Globals.View != null)
-        {
-            Globals.View.ItemChanged += View_ItemChanged;
-            Globals.View.EngineChanged += View_EngineChanged;
-        }
+        if (Globals.View == null || _mainFormEventsSubscribed)
+            return;
+
+        Globals.View.ItemChanged += View_ItemChanged;
+        Globals.View.EngineChanged += View_EngineChanged;
+        _mainFormEventsSubscribed = true;
     }
 
     private void View_EngineChanged(InventoryItem item, AlchemyEngine alchemyEngine)

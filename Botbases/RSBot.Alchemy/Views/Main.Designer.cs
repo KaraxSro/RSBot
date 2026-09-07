@@ -239,7 +239,7 @@ namespace RSBot.Alchemy.Views
             linkRefreshItemList.ApplyGradient = false;
             linkRefreshItemList.AutoSize = true;
             linkRefreshItemList.Cursor = Cursors.Hand;
-            linkRefreshItemList.Font = new Font("Segoe UI", 15.75F, FontStyle.Regular, GraphicsUnit.Point);
+            linkRefreshItemList.Font = new Font("Segoe UI Symbol", 15.75F, FontStyle.Regular, GraphicsUnit.Point);
             linkRefreshItemList.ForeColor = Color.FromArgb(0, 0, 0);
             linkRefreshItemList.Gradient = (new Color[] { Color.Gray, Color.Black });
             linkRefreshItemList.Location = new Point(272, 39);
@@ -247,7 +247,7 @@ namespace RSBot.Alchemy.Views
             linkRefreshItemList.Name = "linkRefreshItemList";
             linkRefreshItemList.Size = new Size(34, 30);
             linkRefreshItemList.TabIndex = 5;
-            linkRefreshItemList.Text = "🗘";
+            linkRefreshItemList.Text = "↻";
             linkRefreshItemList.Click += linkRefreshItemList_Click;
             // 
             // lvLog

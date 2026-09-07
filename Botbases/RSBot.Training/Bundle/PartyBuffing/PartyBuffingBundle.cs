@@ -35,7 +35,7 @@ internal class PartyBuffingBundle : IBundle
     /// </summary>
     public void Invoke()
     {
-        if (_refreshing)
+        if (_refreshing || Game.Player.InAction || SkillManager.CastPending)
             return;
 
         if (Game.Player.HasActiveVehicle)
@@ -96,7 +96,8 @@ internal class PartyBuffingBundle : IBundle
                     continue;
 
                 Log.Status($"Buffing {skill.Record?.GetRealName()} party member {member.Name}");
-                skill.Cast(member.UniqueId, true);
+                SkillManager.CastBuff(skill, member.UniqueId, false);
+                return;
             }
         }
     }

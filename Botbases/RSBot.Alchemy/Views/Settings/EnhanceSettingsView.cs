@@ -18,6 +18,7 @@ public partial class EnhanceSettingsView : DoubleBufferedControl
     #region Member
 
     private InventoryItem _selectedItem;
+    private bool _mainFormEventsSubscribed;
 
     #endregion Member
 
@@ -35,7 +36,7 @@ public partial class EnhanceSettingsView : DoubleBufferedControl
             true
         );
 
-        EventManager.SubscribeEvent("OnEnterGame", SubscribeMainFormEvents);
+        EventManager.SubscribeEvent("OnLoadCharacter", SubscribeMainFormEvents);
     }
 
     #endregion Constructor
@@ -68,11 +69,12 @@ public partial class EnhanceSettingsView : DoubleBufferedControl
     /// </summary>
     private void SubscribeMainFormEvents()
     {
-        if (Globals.View == null)
+        if (Globals.View == null || _mainFormEventsSubscribed)
             return;
 
         Globals.View.EngineChanged += View_EngineChanged;
         Globals.View.ItemChanged += View_ItemChanged;
+        _mainFormEventsSubscribed = true;
     }
 
     /// <summary>
