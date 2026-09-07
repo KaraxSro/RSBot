@@ -401,7 +401,10 @@ public partial class Main : DoubleBufferedControl
         if (IsDisposed || Disposing)
             return;
 
-        var area = Kernel.Bot.Botbase.Area;
+        if (Kernel.Bot?.Botbase?.Name != "RSBot.Training")
+            return;
+
+        var area = global::RSBot.Training.Container.Bot.Area;
         //Training Area
         txtXCoord.Text = area.Position.X.ToString("0.0");
         txtYCoord.Text = area.Position.Y.ToString("0.0");

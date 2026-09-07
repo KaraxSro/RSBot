@@ -1,6 +1,5 @@
 ﻿using RSBot.Core;
 using RSBot.Core.Network;
-using RSBot.General.Components;
 
 namespace RSBot.General.PacketHandler;
 
@@ -28,7 +27,6 @@ internal class AgentLoginResponse : IPacketHandler
     /// <param name="packet">The packet.</param>
     public void Invoke(Packet packet)
     {
-        AutoLogin.StopAgentLoginWatchdog();
         Log.Debug("Agent login response received!");
 
         var flag = packet.ReadByte();

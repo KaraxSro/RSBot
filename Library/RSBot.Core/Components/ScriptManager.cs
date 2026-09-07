@@ -127,15 +127,23 @@ public class ScriptManager
     /// </summary>
     public static void RunScript(bool useNearbyWaypoint = true, bool ignoreBotRunning = false)
     {
+        RunScriptWithResult(useNearbyWaypoint, ignoreBotRunning);
+    }
+
+    /// <summary>
+    ///     Runs the loaded script and reports whether it completed without a failed or interrupted command.
+    /// </summary>
+    public static bool RunScriptWithResult(bool useNearbyWaypoint = true, bool ignoreBotRunning = false)
+    {
         if (Commands == null || Commands.Length == 0)
         {
             LogScriptMessage("No script loaded.", 0, LogLevel.Warning);
 
-            return;
+            return false;
         }
 
         if (Running && !Paused)
-            return;
+            return false;
 
         Running = true;
         Paused = false;
@@ -145,7 +153,7 @@ public class ScriptManager
             Log.Debug($"[Script] Found nearby walk position at line #{CurrentLineIndex}");
 
         if (Commands == null || Commands.Length == 0 || Commands.Length < CurrentLineIndex)
-            return;
+            return false;
 
         var error = false;
         foreach (var scriptLine in Commands?.Skip(CurrentLineIndex))
@@ -197,6 +205,7 @@ public class ScriptManager
 
             if (executionResult == false)
             {
+                error = true;
                 LogScriptMessage(
                     "The execution of the script command failed.",
                     CurrentLineIndex,
@@ -215,6 +224,8 @@ public class ScriptManager
 
         if (!Paused)
             Stop(error);
+
+        return !error && !Paused;
     }
 
     /// <summary>

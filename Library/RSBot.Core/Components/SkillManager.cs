@@ -280,9 +280,6 @@ public static class SkillManager
         if (skill.ReqCommon_Mastery1 == 1)
             return true;
 
-        InventoryItem requiredItem = null;
-        TypeIdFilter filter = null;
-
         var currentWeapon = Game.Player.Inventory.GetItemAt(6);
         if (skill.ReqCast_Weapon1 == WeaponType.Any)
         {
@@ -302,46 +299,25 @@ public static class SkillManager
             if (list.Count == 0)
                 return true;
 
-            filter = list.FirstOrDefault(p =>
-                p.TypeID3 == currentWeapon?.Record.TypeID3 && p.TypeID4 == currentWeapon?.Record.TypeID4
-            );
-            if (filter != null)
-                return true;
+            return list.Any(requirement =>
+            {
+                var equippedSlot = (byte)(requirement.TypeID3 == 6 ? 6 : 7);
+                var equippedItem = Game.Player.Inventory.GetItemAt(equippedSlot);
 
-            filter = list.FirstOrDefault();
+                return equippedItem != null && requirement.EqualsRefItem(equippedItem.Record);
+            });
         }
-        else
-        {
-            filter = new TypeIdFilter(p =>
-                p.TypeID2 == 1
-                && p.TypeID3 == 6
-                && (
-                    p.TypeID4 == (byte)skill.ReqCast_Weapon1
-                    || ((byte)skill.ReqCast_Weapon2 != 0xFF && p.TypeID4 == (byte)skill.ReqCast_Weapon2)
+
+        return currentWeapon != null
+            && currentWeapon.Record.TypeID2 == 1
+            && currentWeapon.Record.TypeID3 == 6
+            && (
+                currentWeapon.Record.TypeID4 == (byte)skill.ReqCast_Weapon1
+                || (
+                    (byte)skill.ReqCast_Weapon2 != 0xFF
+                    && currentWeapon.Record.TypeID4 == (byte)skill.ReqCast_Weapon2
                 )
             );
-        }
-
-        requiredItem = Game.Player.Inventory.GetItemBest(filter);
-        if (requiredItem == null)
-            return false;
-
-        var movingSlot = (byte)(requiredItem.Record.TypeID3 == 6 ? 6 : 7);
-        if (requiredItem.Slot == movingSlot)
-            return true;
-
-        var result = requiredItem.Equip(movingSlot);
-
-        if (movingSlot == 6 && requiredItem.Record.TwoHanded == 0)
-        {
-            // find and equip the shield item automatically
-            filter = new TypeIdFilter(3, 1, 4, (byte)(Game.Player.Race == ObjectCountry.Chinese ? 1 : 2));
-            var shieldItem = Game.Player.Inventory.GetItemBest(filter);
-            if (shieldItem != null && shieldItem.Slot != 7)
-                shieldItem.Equip(7);
-        }
-
-        return result;
     }
 
     public static bool CastSkill(SkillInfo skill, uint targetId = 0)

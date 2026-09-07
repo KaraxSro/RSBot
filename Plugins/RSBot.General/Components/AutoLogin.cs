@@ -28,8 +28,6 @@ internal static class AutoLogin
     /// </summary>
     private static int _busy;
 
-    private static CancellationTokenSource _agentLoginCts;
-
     /// <summary>
     ///     Does the automatic login.
     /// </summary>
@@ -166,59 +164,6 @@ internal static class AutoLogin
         packet.Lock();
 
         return packet;
-    }
-
-    internal static void StartAgentLoginWatchdog()
-    {
-        StopAgentLoginWatchdog();
-
-        if (!GlobalConfig.Get<bool>("RSBot.General.EnableAutomatedLogin") || Game.Clientless)
-            return;
-
-        _agentLoginCts = new CancellationTokenSource();
-        _ = RetryAgentLoginAsync(_agentLoginCts.Token);
-    }
-
-    internal static void StopAgentLoginWatchdog()
-    {
-        var cts = Interlocked.Exchange(ref _agentLoginCts, null);
-        if (cts == null)
-            return;
-
-        cts.Cancel();
-        cts.Dispose();
-    }
-
-    private static async Task RetryAgentLoginAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            // The regular client request normally arrives immediately. Retry only if the
-            // agent did not answer, which also covers a packet lost during GW -> AS switch.
-            for (var attempt = 1; attempt <= 2; attempt++)
-            {
-                await Task.Delay(3000, cancellationToken);
-
-                if (!Kernel.Proxy.IsConnectedToAgentserver || !Kernel.Proxy.ClientConnected)
-                    continue;
-
-                var opcode = (ushort)(Game.ClientType == GameClientType.Rigid ? 0x6118 : 0x6103);
-                var packet = CreateAgentLoginRequest(opcode, true);
-                if (packet == null)
-                    return;
-
-                Log.Debug($"Agent login response timed out. Retrying ({attempt}/2)...");
-                PacketManager.SendPacket(packet, PacketDestination.Server);
-            }
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected once the agent server acknowledges the login.
-        }
-        catch (Exception ex)
-        {
-            Log.Error($"Agent login retry failed unexpectedly: {ex.Message}");
-        }
     }
 
     private static Account GetSelectedAccount()

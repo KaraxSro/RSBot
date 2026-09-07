@@ -8,10 +8,11 @@ namespace RSBot.Training.Bundle.Loop;
 
 internal class LoopBundle : IBundle
 {
-    private const int REVERSE_RETURN_SETTLE_TIME = 2_000;
+    private const int TELEPORT_SETTLE_TIME = 2_000;
 
+    private int _startGate;
     private volatile bool _reverseReturnPending;
-    private volatile int _reverseReturnCompletedAt;
+    private volatile int _teleportCompletedAt;
 
     /// <summary>
     ///     Gets the configuration.
@@ -38,23 +39,23 @@ internal class LoopBundle : IBundle
     public bool TownscriptRunning { get; private set; }
 
     /// <summary>
-    ///     Gets a value indicating whether the bot should wait for a reverse return teleport to settle.
+    ///     Gets a value indicating whether the bot should wait for a teleport to finish and the player position to settle.
     /// </summary>
-    public bool WaitingForReverseReturn
+    public bool WaitingForTeleportSettle
     {
         get
         {
-            if (!_reverseReturnPending)
-                return false;
-
-            if (_reverseReturnCompletedAt == 0)
+            if (_reverseReturnPending && _teleportCompletedAt == 0)
                 return true;
 
-            if (Kernel.TickCount - _reverseReturnCompletedAt < REVERSE_RETURN_SETTLE_TIME)
+            if (
+                _teleportCompletedAt != 0
+                && Kernel.TickCount - _teleportCompletedAt < TELEPORT_SETTLE_TIME
+            )
                 return true;
 
             _reverseReturnPending = false;
-            _reverseReturnCompletedAt = 0;
+            _teleportCompletedAt = 0;
 
             return false;
         }
@@ -105,17 +106,16 @@ internal class LoopBundle : IBundle
             ShoppingManager.Stop();
 
         _reverseReturnPending = false;
-        _reverseReturnCompletedAt = 0;
+        _teleportCompletedAt = 0;
         Running = false;
     }
 
     /// <summary>
-    ///     Marks the reverse return teleport as completed and starts the position settling period.
+    ///     Marks a teleport as completed and starts the position settling period.
     /// </summary>
     public void OnTeleportComplete()
     {
-        if (_reverseReturnPending)
-            _reverseReturnCompletedAt = Kernel.TickCount;
+        _teleportCompletedAt = Kernel.TickCount;
     }
 
     /// <summary>
@@ -123,12 +123,24 @@ internal class LoopBundle : IBundle
     /// </summary>
     public void Start()
     {
-        Running = true;
+        if (Interlocked.CompareExchange(ref _startGate, 1, 0) != 0)
+        {
+            Log.Debug("[Training] Ignoring a duplicate loop start request.");
+            return;
+        }
 
-        Refresh();
-        CheckForTownScript();
+        try
+        {
+            Running = true;
 
-        Running = false;
+            Refresh();
+            CheckForTownScript();
+        }
+        finally
+        {
+            Running = false;
+            Interlocked.Exchange(ref _startGate, 0);
+        }
     }
 
     /// <summary>
@@ -143,6 +155,10 @@ internal class LoopBundle : IBundle
             ScriptManager.InitialDirectory,
             "Towns",
             Game.Player.Movement.Source.Region + ".rbs"
+        );
+
+        Log.Debug(
+            $"[Training] Checking town script for region [{Game.Player.Movement.Source.Region.Id}] at [{filename}]."
         );
 
         //The player is in town, therefore, we need to run the town script first.
@@ -162,8 +178,25 @@ internal class LoopBundle : IBundle
 
         TownscriptRunning = true;
 
-        ScriptManager.Load(filename);
-        ScriptManager.RunScript(false);
+        bool townScriptSucceeded;
+        try
+        {
+            ScriptManager.Load(filename);
+            townScriptSucceeded = ScriptManager.RunScriptWithResult(false);
+        }
+        finally
+        {
+            TownscriptRunning = false;
+        }
+
+        if (!townScriptSucceeded)
+        {
+            Log.Warn("[Training] Town script did not finish successfully. Return to the training area was cancelled.");
+            return;
+        }
+
+        if (!Running)
+            return;
 
         if (Running && Config.UseReverse)
         {
@@ -179,22 +212,17 @@ internal class LoopBundle : IBundle
                     error codes:
                         85: Cannot find the place where you selected as recall point.
                         86: Cannot find the place where you died.
-                 */
+                */
                 _reverseReturnPending = true;
-                _reverseReturnCompletedAt = 0;
+                _teleportCompletedAt = 0;
 
                 if (item.UseTo(3))
-                {
-                    TownscriptRunning = false;
                     return;
-                }
 
                 _reverseReturnPending = false;
-                _reverseReturnCompletedAt = 0;
+                _teleportCompletedAt = 0;
             }
         }
-
-        TownscriptRunning = false;
 
         Invoke();
 

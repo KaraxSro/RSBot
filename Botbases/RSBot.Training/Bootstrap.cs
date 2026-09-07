@@ -13,6 +13,8 @@ namespace RSBot.Training;
 
 public class Bootstrap : IBotbase
 {
+    private bool _initialized;
+
     /// <inheritdoc />
     public string Author => "RSBot Team";
 
@@ -49,7 +51,7 @@ public class Bootstrap : IBotbase
         if (Game.Player.State.LifeState == LifeState.Dead)
             return;
 
-        if (Bundles.Loop.WaitingForReverseReturn)
+        if (Bundles.Loop.WaitingForTeleportSettle)
             return;
 
         //Begin the loopback if needed
@@ -115,8 +117,15 @@ public class Bootstrap : IBotbase
     /// <inheritdoc />
     public void Initialize()
     {
+        if (_initialized)
+        {
+            Container.Bot.Reload();
+            return;
+        }
+
         Container.Lock = new object();
         Container.Bot = new Botbase();
+        Container.Bot.Reload();
 
         //Bundles.Reload();
 
@@ -125,6 +134,7 @@ public class Bootstrap : IBotbase
         TeleportSubscriber.SubscribeEvents();
 
         ScriptManager.CommandHandlers.Add(new TrainingAreaScriptCommand());
+        _initialized = true;
         Log.Debug("[Training] Botbase registered to the kernel!");
     }
 

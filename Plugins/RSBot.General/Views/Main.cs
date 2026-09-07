@@ -318,8 +318,6 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private void OnAgentServerConnected()
     {
-        AutoLogin.StartAgentLoginWatchdog();
-
         //if (!Game.Clientless)
         //    btnGoClientless.Enabled = true;
     }
@@ -329,7 +327,6 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private async void OnAgentServerDisconnected()
     {
-        AutoLogin.StopAgentLoginWatchdog();
         Kernel.Bot.Stop();
 
         var userAuthenticated = await HandleRegionalAuth();

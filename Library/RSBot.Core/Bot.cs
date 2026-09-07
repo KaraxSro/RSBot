@@ -8,6 +8,8 @@ namespace RSBot.Core;
 
 public class Bot
 {
+    private readonly object _startLock = new();
+
     /// <summary>
     ///     Gets or sets a value indicating whether this <see cref="Bot" /> is running.
     /// </summary>
@@ -46,20 +48,24 @@ public class Bot
     /// </summary>
     public void Start()
     {
-        if (Running || Botbase == null)
-            return;
+        CancellationTokenSource tokenSource;
+        lock (_startLock)
+        {
+            if (Running || Botbase == null)
+                return;
 
-        TokenSource = new CancellationTokenSource();
+            tokenSource = new CancellationTokenSource();
+            TokenSource = tokenSource;
+            Running = true;
+        }
 
         Task.Factory.StartNew(
             async e =>
             {
-                Running = true;
-
                 EventManager.FireEvent("OnStartBot");
                 Botbase.Start();
 
-                while (!TokenSource.IsCancellationRequested)
+                while (!tokenSource.IsCancellationRequested)
                 {
                     if (!Game.Ready)
                         continue;
@@ -68,7 +74,7 @@ public class Bot
                     await Task.Delay(100);
                 }
             },
-            TokenSource.Token,
+            tokenSource.Token,
             TaskCreationOptions.LongRunning
         );
     }

@@ -25,7 +25,7 @@ internal class TeleportSubscriber
         if (!Kernel.Bot.Running)
             return;
 
-        if (Bundles.Loop.WaitingForReverseReturn)
+        if (Bundles.Loop.WaitingForTeleportSettle)
             return;
 
         if (Bundles.Loop.Running)
