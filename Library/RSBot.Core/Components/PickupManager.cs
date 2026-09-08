@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using RSBot.Core.Client.ReferenceObjects;
 using RSBot.Core.Objects;
 using RSBot.Core.Objects.Spawn;
 
@@ -250,18 +251,44 @@ public class PickupManager
         if (PickupGold && e.Record.IsGold && !(applyPickOnlyChar && pickOnlyChar))
             return true;
 
+        return MatchesItemRules(e.Record, applyPickOnlyChar ? pickOnlyChar : null, includeGoldRule: false);
+    }
+
+    /// <summary>
+    /// Evaluates the persistent item filters without runtime restrictions such as
+    /// ownership, training area, berserkker state or the available pickup actor.
+    /// </summary>
+    public static bool WouldPickupByItemRules(RefObjItem item)
+    {
+        return MatchesItemRules(item, pickOnlyChar: null, includeGoldRule: true);
+    }
+
+    private static bool MatchesItemRules(RefObjItem item, bool? pickOnlyChar, bool includeGoldRule)
+    {
+        if (item == null)
+            return false;
+        if (includeGoldRule && PickupGold && item.IsGold)
+            return true;
+        if (PickupEverything)
+            return true;
+
+        // Detailed rare rules are authoritative over the broad blue/equipment
+        // switches, otherwise those switches would make the rare matrix ineffective.
+        if (ItemCategoryRules.GetRareRuleKey(item) != null)
+            return ItemCategoryRules.ShouldPickup(item);
+
         if (
-            (PickupRareItems && (byte)e.Rarity >= 2)
-            || (PickupBlueItems && (byte)e.Rarity >= 1)
-            || (PickupAnyEquips && e.Record.IsEquip)
-            || (PickupQuestItems && e.Record.IsQuest)
-            || PickupEverything
+            (PickupBlueItems && item.Rarity == ObjectRarity.ClassB)
+            || (PickupAnyEquips && item.IsEquip)
+            || (PickupQuestItems && item.IsQuest)
+            || ItemCategoryRules.ShouldPickup(item)
         )
             return true;
 
-        return applyPickOnlyChar
-            ? PickupFilter.Any(p => p.CodeName == e.Record.CodeName && p.PickOnlyChar == pickOnlyChar)
-            : PickupFilter.Any(p => p.CodeName == e.Record.CodeName);
+        return PickupFilter.Any(filter =>
+            filter.CodeName == item.CodeName
+            && (!pickOnlyChar.HasValue || filter.PickOnlyChar == pickOnlyChar.Value)
+        );
     }
 
     public static void AddFilter(string codeName, bool pickOnlyChar = false)
@@ -280,6 +307,9 @@ public class PickupManager
 
     public static void LoadFilter()
     {
+        PickupFilter.Clear();
+        ItemCategoryRules.Load();
+
         var config = PlayerConfig.GetArray<string>("RSBot.Shopping.Pickup");
 
         foreach (var item in config)

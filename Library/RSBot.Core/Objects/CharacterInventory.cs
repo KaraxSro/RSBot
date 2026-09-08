@@ -170,60 +170,127 @@ public class CharacterInventory : InventoryItemCollection
 
         IsSorting = true;
         Log.Debug("Sorting the character inventory...");
+        var operations = 0;
 
-        //Use iterations to avoid deadlocks!
-        const int maxIterations = 10;
-        var iterations = 0;
-
-        //Ignore items which move operations failed in the next iteration
-        var blacklistedItems = new List<uint>(4);
-
-        int firstSlot = 13;
-        if (Game.ClientType == GameClientType.Global
-            || Game.ClientType == GameClientType.Korean
-            || Game.ClientType == GameClientType.VTC_Game
-            || Game.ClientType == GameClientType.RuSro
-            || Game.ClientType == GameClientType.Turkey
-            || Game.ClientType == GameClientType.Taiwan
-            || Game.ClientType == GameClientType.Japanese)
-            firstSlot = 17; //4 slots for relics
-
-        for (var iIteration = 0; iIteration < maxIterations; iIteration++)
+        try
         {
-            iterations++;
+            operations += ConsolidateStacks();
+            operations += ArrangeItemsByReferenceId();
+        }
+        finally
+        {
+            IsSorting = false;
+            Log.Debug($"Sorting finished after {operations} move operations");
+        }
+    }
 
-            var itemsToStackGroups = this.Where(i =>
-                    i.Slot >= firstSlot
-                    && i.Record.IsStackable
-                    && i.Record.MaxStack > i.Amount
-                    && !blacklistedItems.Contains(i.ItemId)
+    private int ConsolidateStacks()
+    {
+        var operations = 0;
+        var itemIds = GetNormalPartItems(item => item.Record.IsStackable)
+            .Select(item => item.ItemId)
+            .Distinct()
+            .ToArray();
+
+        foreach (var itemId in itemIds)
+        {
+            while (!Game.Player.InAction)
+            {
+                var stacks = GetNormalPartItems(item => item.ItemId == itemId)
+                    .OrderBy(item => item.Slot)
+                    .ToArray();
+                if (stacks.Length < 2)
+                    break;
+
+                // Fill the earliest non-full stack from the last later stack. This
+                // leaves full stacks first and at most one partial stack at the end.
+                var destination = stacks.FirstOrDefault(item => item.Amount < item.Record.MaxStack);
+                if (destination == null)
+                    break;
+
+                var source = stacks.LastOrDefault(item => item.Slot > destination.Slot);
+                if (source == null)
+                    break;
+
+                var freeAmount = destination.Record.MaxStack - destination.Amount;
+                var moveAmount = (ushort)Math.Min(source.Amount, freeAmount);
+                if (moveAmount == 0)
+                    break;
+
+                var destinationAmountBefore = destination.Amount;
+                if (!MoveItem(source.Slot, destination.Slot, moveAmount))
+                {
+                    Log.Warn($"Could not consolidate inventory item {itemId}; leaving its remaining stacks unchanged.");
+                    break;
+                }
+
+                operations++;
+                var updatedDestination = GetItemAt(destination.Slot);
+                if (
+                    updatedDestination?.ItemId != itemId
+                    || updatedDestination.Amount <= destinationAmountBefore
                 )
-                .GroupBy(i => i.ItemId);
-
-            if (!itemsToStackGroups.Any())
-                break;
-
-            var itemsToStack = itemsToStackGroups.FirstOrDefault(g => g.Count() >= 2)?.OrderBy(i => i.Slot).ToList();
-
-            if (itemsToStack == null)
-                break;
-
-            var source = itemsToStack.FirstOrDefault();
-            if (source == null)
-                continue;
-
-            var destination = itemsToStack.FirstOrDefault(i => i.Record.ID == source.ItemId && i.Slot != source.Slot);
-            if (destination == null)
-                continue;
-
-            var amount = destination.Record.MaxStack - destination.Amount;
-            var actualAmount = source.Amount > amount ? amount : source.Amount;
-
-            if (!MoveItem(source.Slot, destination.Slot, (ushort)actualAmount))
-                blacklistedItems.Add(source.ItemId);
+                {
+                    Log.Warn(
+                        $"Inventory item {itemId} did not change after a successful stack operation; stopping this group."
+                    );
+                    break;
+                }
+            }
         }
 
-        IsSorting = false;
-        Log.Debug($"Sorting finished after {iterations}/{maxIterations}");
+        return operations;
+    }
+
+    private int ArrangeItemsByReferenceId()
+    {
+        var operations = 0;
+        var itemCount = GetNormalPartItems().Count;
+        var firstSlot = NORMAL_PART_MIN_SLOT;
+
+        for (var offset = 0; offset < itemCount && !Game.Player.InAction; offset++)
+        {
+            var targetSlot = (byte)(firstSlot + offset);
+            var nextItem = GetNormalPartItems(item => item.Slot >= targetSlot)
+                .OrderBy(item => item.ItemId)
+                .ThenBy(item => item.Amount < item.Record.MaxStack)
+                .ThenBy(item => item.Slot)
+                .FirstOrDefault();
+            if (nextItem == null)
+                break;
+
+            var currentItem = GetItemAt(targetSlot);
+            if (currentItem?.ItemId == nextItem.ItemId)
+            {
+                var currentIsFull = currentItem.Amount >= currentItem.Record.MaxStack;
+                var nextIsFull = nextItem.Amount >= nextItem.Record.MaxStack;
+                if (currentIsFull || !nextIsFull)
+                    continue;
+
+                // Moving just the missing amount from the later full stack makes
+                // the current slot full and moves the partial amount behind it.
+                var missingAmount = currentItem.Record.MaxStack - currentItem.Amount;
+                if (!MoveItem(nextItem.Slot, targetSlot, (ushort)missingAmount))
+                {
+                    Log.Warn(
+                        $"Could not move the full inventory stack {nextItem.ItemId} before its partial stack."
+                    );
+                    continue;
+                }
+
+                operations++;
+                continue;
+            }
+
+            if (!MoveItem(nextItem.Slot, targetSlot))
+            {
+                Log.Warn($"Could not move inventory item {nextItem.ItemId} to slot {targetSlot} while sorting.");
+                continue;
+            }
+
+            operations++;
+        }
+
+        return operations;
     }
 }

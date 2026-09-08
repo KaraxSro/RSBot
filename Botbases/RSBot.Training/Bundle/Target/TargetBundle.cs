@@ -142,6 +142,7 @@ internal class TargetBundle : IBundle
             return null;
 
         return entities
+            .Where(entity => !IsBlacklisted(entity.UniqueId))
             .OrderBy(e => GetMonsterStrengthPriority(e.Rarity))
             .ThenBy(e => e.Record.Level)
             .ThenBy(e => e.Position.DistanceToPlayer())
@@ -162,6 +163,7 @@ internal class TargetBundle : IBundle
             !SpawnManager.TryGetEntities<SpawnedMonster>(
                 monster =>
                     monster.State.LifeState == LifeState.Alive
+                    && !IsBlacklisted(monster.UniqueId)
                     && (
                         (growthId != 0 && monster.TargetId == growthId)
                         || (fellowId != 0 && monster.TargetId == fellowId)
@@ -177,6 +179,8 @@ internal class TargetBundle : IBundle
             .ThenBy(monster => monster.DistanceToPlayer)
             .FirstOrDefault();
     }
+
+    private bool IsBlacklisted(uint uniqueId) => _blacklist?.ContainsKey(uniqueId) == true;
 
     private static int GetMonsterStrengthPriority(MonsterRarity rarity)
     {

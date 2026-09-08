@@ -16,7 +16,9 @@ namespace RSBot.Views.Controls.Cos;
 [ToolboxItem(true)]
 public partial class CosController : DoubleBufferedControl
 {
+    private const int CompactScreenHeight = 900;
     private readonly Dictionary<string, CosControlBase> _cachedControls;
+    private bool _compactMiniControls;
     private int _selectedIndex;
 
     public CosController()
@@ -28,6 +30,18 @@ public partial class CosController : DoubleBufferedControl
 
         _cachedControls = new Dictionary<string, CosControlBase>();
         SubscribeEvents();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        UpdateMiniControlLayout();
+    }
+
+    protected override void OnLocationChanged(EventArgs e)
+    {
+        base.OnLocationChanged(e);
+        UpdateMiniControlLayout();
     }
 
     /// <summary>
@@ -130,6 +144,8 @@ public partial class CosController : DoubleBufferedControl
 
         var action = new Action(() =>
         {
+            UpdateMiniControlLayout();
+            control.MiniCosControl.SetCompactMode(_compactMiniControls);
             panel.Controls.Add(control);
             panelTopCenter.Controls.Add(control.MiniCosControl);
             control.MiniCosControl.TabIndex = panel.Controls.Count - 1;
@@ -196,6 +212,25 @@ public partial class CosController : DoubleBufferedControl
                 Height = topPanel.Height + control.Height + 20;
             }
         }
+    }
+
+    private void UpdateMiniControlLayout()
+    {
+        if (!IsHandleCreated)
+            return;
+
+        var compact = Screen.FromControl(this).WorkingArea.Height < CompactScreenHeight;
+        var thumbnailHeight = compact ? 78 : 104;
+        if (_compactMiniControls == compact && topPanel.Height == thumbnailHeight)
+            return;
+
+        _compactMiniControls = compact;
+        topPanel.Height = thumbnailHeight;
+        foreach (var control in _cachedControls.Values)
+            control.MiniCosControl.SetCompactMode(compact);
+
+        if (Visible)
+            ReOrder();
     }
 
     private void buttonNext_Click(object sender, EventArgs e)

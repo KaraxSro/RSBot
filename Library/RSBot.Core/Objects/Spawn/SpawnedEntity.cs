@@ -98,11 +98,23 @@ public class SpawnedEntity
     {
         get
         {
+            if (Game.Player == null)
+                return false;
+
+            // A zero-length (or nearly zero-length) navmesh raycast may report
+            // failure even though no obstacle can exist between the two points.
+            // This happens when a teleport skill lands directly on a monster.
+            if (Game.Player.Position.DistanceTo(Position) <= 0.25)
+            {
+                _lastCollisionResult = false;
+                return false;
+            }
+
             //It's enough to check for collision every 1 second
             if (Kernel.TickCount - _lastCollisionTick >= 1000)
             {
                 _lastCollisionTick = Kernel.TickCount;
-                _lastCollisionResult = Game.Player != null && Game.Player.Position.HasCollisionBetween(Position);
+                _lastCollisionResult = Game.Player.Position.HasCollisionBetween(Position);
             }
 
             return _lastCollisionResult;

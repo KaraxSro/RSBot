@@ -124,18 +124,14 @@ public static class ShoppingManager
         Log.Status("Selling items");
 
         //Prevent modification during the for-each loop
-        var tempItemSellList = Game.Player.Inventory.GetNormalPartItems(item =>
-            SellFilter.Any(p => p == item.Record.CodeName)
-        );
+        var tempItemSellList = Game.Player.Inventory.GetNormalPartItems(ShouldSell);
 
         foreach (var item in tempItemSellList)
             SellItem(item);
 
         if (Game.Player.HasActiveAbilityPet && SellPetItems)
         {
-            tempItemSellList = Game.Player.AbilityPet.Inventory.GetItems(item =>
-                SellFilter.Any(p => p == item.Record.CodeName)
-            );
+            tempItemSellList = Game.Player.AbilityPet.Inventory.GetItems(ShouldSell);
 
             foreach (var item in tempItemSellList)
             {
@@ -442,9 +438,7 @@ public static class ShoppingManager
             || Game.ClientType == GameClientType.Japanese)
             firstSlot = 17; //4 slots for relics
 
-        var tempInventory = Game.Player.Inventory.GetItems(item =>
-            item.Slot >= firstSlot && StoreFilter.Any(p => p == item.Record.CodeName)
-        );
+        var tempInventory = Game.Player.Inventory.GetItems(item => item.Slot >= firstSlot && ShouldStore(item));
 
         SelectNPC(npcCodeName);
         var npc = SelectedEntity;
@@ -473,9 +467,7 @@ public static class ShoppingManager
 
         if (Game.Player.HasActiveAbilityPet && StorePetItems)
         {
-            var petItemStoreList = Game.Player.AbilityPet.Inventory.GetItems(item =>
-                StoreFilter.Any(p => p == item.Record.CodeName)
-            );
+            var petItemStoreList = Game.Player.AbilityPet.Inventory.GetItems(ShouldStore);
 
             foreach (var item in petItemStoreList)
             {
@@ -785,6 +777,9 @@ public static class ShoppingManager
 
     public static void LoadFilters()
     {
+        SellFilter.Clear();
+        StoreFilter.Clear();
+
         var configSell = PlayerConfig.GetArray<string>("RSBot.Shopping.Sell");
         var configStore = PlayerConfig.GetArray<string>("RSBot.Shopping.Store");
 
@@ -793,12 +788,42 @@ public static class ShoppingManager
 
         foreach (var item in configStore)
             StoreFilter.Add(item);
+
+        ItemCategoryRules.Load();
     }
 
     public static void SaveFilters()
     {
         PlayerConfig.SetArray("RSBot.Shopping.Sell", SellFilter);
         PlayerConfig.SetArray("RSBot.Shopping.Store", StoreFilter);
+    }
+
+    private static bool ShouldStore(InventoryItem item)
+    {
+        return WouldStore(item?.Record);
+    }
+
+    private static bool ShouldSell(InventoryItem item)
+    {
+        return WouldSell(item?.Record);
+    }
+
+    public static bool WouldStore(RefObjItem item)
+    {
+        return item != null
+            && (StoreFilter.Contains(item.CodeName) || ItemCategoryRules.ShouldStore(item));
+    }
+
+    public static bool WouldSell(RefObjItem item)
+    {
+        if (item == null || WouldStore(item))
+            return false;
+
+        return SellFilter.Contains(item.CodeName)
+            || (
+                ItemCategoryRules.SellUnselectedEquipment
+                && ItemCategoryRules.IsManagedEquipment(item)
+            );
     }
 
     /// <summary>

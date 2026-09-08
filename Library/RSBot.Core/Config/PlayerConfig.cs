@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using RSBot.Core.Components;
 using RSBot.Core.Event;
 
@@ -23,9 +24,115 @@ public static class PlayerConfig
     /// <param name="file">The config file path</param>
     public static void Load(string charName)
     {
-        _config = new Config(Path.Combine(_configDirectory, charName + ".rs"));
+        var configPath = Path.Combine(_configDirectory, charName + ".rs");
+        var isNewConfig = !File.Exists(configPath) || new FileInfo(configPath).Length == 0;
+
+        _config = new Config(configPath);
+
+        if (isNewConfig)
+        {
+            ApplyNewCharacterDefaults();
+            _config.Save();
+        }
 
         Log.Notify("[Player] settings have been loaded!");
+    }
+
+    /// <summary>
+    ///     Applies the initial settings only when a character has no saved configuration yet.
+    /// </summary>
+    private static void ApplyNewCharacterDefaults()
+    {
+        const string training = "RSBot.Training.";
+        Set(training + "checkUseMount", false);
+        Set(training + "checkCastBuffs", true);
+        Set(training + "checkUseSpeedDrug", false);
+        Set(training + "checkBoxUseReverse", true);
+        Set(training + "ReverseDestination", "Death");
+
+        Set(training + "checkBerzerkMonsterAmount", true);
+        Set(training + "numBerzerkMonsterAmount", 5);
+        Set(training + "checkBerserkOnMonsterRarity", true);
+        SetArray("RSBot.Avoidance.Berserk", new[] { "Giant" });
+
+        Set(training + "checkBoxDimensionPillar", true);
+        Set(training + "checkAttackWeakerFirst", true);
+        Set(training + "checkDefendPetFirst", true);
+        Set(training + "checkBoxDontFollowMobs", true);
+
+        const string protection = "RSBot.Protection.";
+        Set(protection + "checkUseHPPotionsPlayer", true);
+        Set(protection + "numPlayerHPPotionMin", 60);
+        Set(protection + "checkUseMPPotionsPlayer", true);
+        Set(protection + "numPlayerMPPotionMin", 60);
+        Set(protection + "checkUseVigorHP", true);
+        Set(protection + "numPlayerHPVigorPotionMin", 50);
+        Set(protection + "checkUseUniversalPills", true);
+
+        Set(protection + "checkUsePetHP", true);
+        Set(protection + "numPetMinHP", 80);
+        Set(protection + "checkUseHGP", true);
+        Set(protection + "numPetMinHGP", 90);
+        Set(protection + "checkReviveAttackPet", true);
+        Set(protection + "checkAutoSummonAttackPet", true);
+
+        Set(protection + "checkDead", true);
+        Set(protection + "numDeadTimeout", 5);
+        Set(protection + "checkInventory", true);
+        Set(protection + "checkFullPetInventory", true);
+        Set(protection + "checkNoHPPotions", true);
+        Set(protection + "numHPPotionsLeft", 15);
+        Set(protection + "checkNoMPPotions", true);
+        Set(protection + "numMPPotionsLeft", 15);
+        Set(protection + "checkDurability", true);
+
+        var rareRules = new List<string> { "RocSet", "Nova", "NovaSetA", "NovaSetB" };
+        foreach (var degree in Enumerable.Range(1, 10))
+        {
+            rareRules.Add("Star." + degree);
+            rareRules.Add("Moon." + degree);
+            rareRules.Add("Sun." + degree);
+        }
+
+        SetArray("RSBot.Items.Rare.Pickup", rareRules);
+        SetArray("RSBot.Items.Rare.Store", rareRules);
+        Set("RSBot.Items.Pickup.AnyEquips", true);
+        SetArray("RSBot.Items.Store.Equipment.Degrees", Enumerable.Range(1, 12));
+        Set("RSBot.Items.Store.Clothes.Male", true);
+        Set("RSBot.Items.Store.Clothes.Female", true);
+
+        var elixirs = new List<string>
+        {
+            "Supply.Elixir.Weapon",
+            "Supply.Elixir.Shield",
+            "Supply.Elixir.Protector",
+            "Supply.Elixir.Accessory",
+        };
+
+        var pickupSupplies = new List<string>(elixirs)
+        {
+            "Supply.Item.ITEM_ETC_HP_SPOTION_01",
+            "Supply.Item.ITEM_ETC_MP_SPOTION_01",
+            "Supply.Item.ITEM_ETC_ALL_SPOTION_01",
+        };
+        pickupSupplies.AddRange(
+            Enumerable.Range(1, 5).Select(number => $"Supply.Item.ITEM_ETC_HP_POTION_{number:00}")
+        );
+        pickupSupplies.AddRange(
+            Enumerable.Range(1, 5).Select(number => $"Supply.Item.ITEM_ETC_MP_POTION_{number:00}")
+        );
+        pickupSupplies.AddRange(
+            Enumerable.Range(1, 5).Select(number => $"Supply.Item.ITEM_ETC_ALL_POTION_{number:00}")
+        );
+        pickupSupplies.AddRange(
+            Enumerable.Range(1, 6).Select(number => $"Supply.Item.ITEM_ETC_CURE_ALL_{number:00}")
+        );
+        pickupSupplies.AddRange(
+            Enumerable.Range(1, 4).Select(number => $"Supply.Item.ITEM_ETC_CURE_RANDOM_{number:00}")
+        );
+
+        SetArray("RSBot.Items.Categories.Pickup", pickupSupplies);
+        SetArray("RSBot.Items.Categories.Store", elixirs);
     }
 
     /// <summary>

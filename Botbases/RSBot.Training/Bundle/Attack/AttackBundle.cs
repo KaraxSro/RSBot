@@ -1,5 +1,6 @@
 ﻿using RSBot.Core;
 using RSBot.Core.Components;
+using RSBot.Core.Event;
 using RSBot.Core.Objects;
 
 namespace RSBot.Training.Bundle.Attack;
@@ -28,8 +29,9 @@ internal class AttackBundle : IBundle
             if (Game.Player.InAction)
                 SkillManager.CancelAction();
 
-            Game.SelectedEntity?.TryDeselect();
-            Game.SelectedEntity = null;
+            // Use the common obstacle handler so the target is blacklisted and
+            // movement is allowed to reposition instead of selecting it again.
+            EventManager.FireEvent("OnTargetBehindObstacle");
 
             return;
         }

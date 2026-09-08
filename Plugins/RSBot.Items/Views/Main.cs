@@ -34,6 +34,7 @@ public partial class Main : DoubleBufferedControl
     {
 
         InitializeComponent();
+        InitializeCategoryRulesUi();
         SubscribeEvents();
 
         listShoppingList.SmallImageList = ListViewExtensions.StaticItemsImageList;
@@ -579,6 +580,7 @@ public partial class Main : DoubleBufferedControl
     private void OnLoadGameData()
     {
         LoadGroups();
+        RefreshSupplyRulesUi();
     }
 
     /// <summary>
@@ -610,6 +612,8 @@ public partial class Main : DoubleBufferedControl
             ShoppingManager.RepairGear = checkRepairGear.Checked;
             ShoppingManager.SellPetItems = checkSellItemsFromPet.Checked;
             ShoppingManager.StorePetItems = checkStoreItemsFromPet.Checked;
+
+            LoadCategoryRuleSettings();
 
             LoadShoppingList();
 
@@ -752,7 +756,7 @@ public partial class Main : DoubleBufferedControl
         ShoppingManager.Enabled = checkEnable.Checked;
         PlayerConfig.Set("RSBot.Shopping.Enabled", checkEnable.Checked);
 
-        PlayerConfig.Set("RSBot.Shopping.StorePetItems", checkSellItemsFromPet.Checked);
+        PlayerConfig.Set("RSBot.Shopping.StorePetItems", checkStoreItemsFromPet.Checked);
         ShoppingManager.StorePetItems = checkStoreItemsFromPet.Checked;
 
         PlayerConfig.Set("RSBot.Shopping.SellPetItems", checkSellItemsFromPet.Checked);

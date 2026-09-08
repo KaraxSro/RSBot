@@ -58,7 +58,7 @@ public static class Kernel
     /// </summary>
     public static bool EnableCollisionDetection
     {
-        get => GlobalConfig.Get("RSBot.EnableCollisionDetection", false);
+        get => GlobalConfig.Get("RSBot.EnableCollisionDetection", true);
         set => GlobalConfig.Set("RSBot.EnableCollisionDetection", value);
     }
 
