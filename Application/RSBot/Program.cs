@@ -18,8 +18,7 @@ internal static class Program
         .GetCustomAttribute<AssemblyProductAttribute>()
         ?.Product;
 
-    public static string AssemblyVersion =
-        $"v{Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
+    public static string AssemblyVersion = $"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
 
     public static string AssemblyDescription = Assembly
         .GetExecutingAssembly()

@@ -18,7 +18,7 @@ public class CosControlBase : DoubleBufferedControl
 
     public CosControlBase()
     {
-        SetStyle(System.Windows.Forms.ControlStyles.Opaque, true);
+        BackColor = Color.Transparent;
         MiniCosControl = new MiniCosControl();
         MiniCosControl.Dock = System.Windows.Forms.DockStyle.Left;
         InitializeComponent();
@@ -58,7 +58,7 @@ public class CosControlBase : DoubleBufferedControl
     Color.Black
 };
         label1.GradientAnimation = false;
-        label1.Location = new Point(14, 44);
+        label1.Location = new Point(12, 51);
         label1.Name = "label1";
         label1.Size = new Size(31, 20);
         label1.TabIndex = 20;
@@ -90,11 +90,14 @@ public class CosControlBase : DoubleBufferedControl
         progressHP.ForeColor = Color.Firebrick;
         progressHP.Gradient = new Color[]
 {
-    Color.Empty,
-    Color.Empty
+    Color.Maroon,
+    Color.Red
 };
         progressHP.HatchType = HatchStyle.Percent10;
-        progressHP.Location = new Point(48, 45);
+        progressHP.Anchor = System.Windows.Forms.AnchorStyles.Top
+            | System.Windows.Forms.AnchorStyles.Left
+            | System.Windows.Forms.AnchorStyles.Right;
+        progressHP.Location = new Point(60, 50);
         progressHP.Maximum = 100L;
         progressHP.MaxPercentShowValue = 100F;
         progressHP.Name = "progressHP";
@@ -102,7 +105,7 @@ public class CosControlBase : DoubleBufferedControl
         progressHP.Radius = 1;
         progressHP.ShowAsPercent = false;
         progressHP.ShowValue = true;
-        progressHP.Size = new Size(180, 16);
+        progressHP.Size = new Size(225, 22);
         progressHP.TabIndex = 18;
         progressHP.Text = "0 / 100";
         progressHP.Value = 0L;
@@ -114,11 +117,14 @@ public class CosControlBase : DoubleBufferedControl
         panel1.BorderColor = Color.Transparent;
         panel1.Controls.Add(labelLevel);
         panel1.Controls.Add(lblPetName);
-        panel1.Location = new Point(48, 18);
+        panel1.Anchor = System.Windows.Forms.AnchorStyles.Top
+            | System.Windows.Forms.AnchorStyles.Left
+            | System.Windows.Forms.AnchorStyles.Right;
+        panel1.Location = new Point(60, 14);
         panel1.Name = "panel1";
         panel1.Radius = 10;
         panel1.ShadowDepth = 4F;
-        panel1.Size = new Size(180, 21);
+        panel1.Size = new Size(225, 26);
         panel1.TabIndex = 21;
         // 
         // labelLevel
@@ -145,10 +151,84 @@ public class CosControlBase : DoubleBufferedControl
         Controls.Add(label1);
         Controls.Add(progressHP);
         Name = "CosControlBase";
-        Size = new Size(243, 79);
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
+        Size = new Size(302, 84);
         panel1.ResumeLayout(false);
         panel1.PerformLayout();
         ResumeLayout(false);
         PerformLayout();
+    }
+
+    /// <summary>
+    ///     Arranges the pet name and status bars in DPI-safe rows.
+    /// </summary>
+    protected void ArrangeStats(
+        params (System.Windows.Forms.Control Label, System.Windows.Forms.Control Value)[] extraRows
+    )
+    {
+        SuspendLayout();
+
+        var layout = new System.Windows.Forms.TableLayoutPanel
+        {
+            BackColor = Color.Transparent,
+            ColumnCount = 2,
+            Dock = System.Windows.Forms.DockStyle.Top,
+            Padding = new System.Windows.Forms.Padding(8),
+            RowCount = extraRows.Length + 2,
+        };
+        layout.ColumnStyles.Add(
+            new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 52F)
+        );
+        layout.ColumnStyles.Add(
+            new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F)
+        );
+        layout.RowStyles.Add(
+            new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 34F)
+        );
+        for (var i = 1; i < layout.RowCount; i++)
+            layout.RowStyles.Add(
+                new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F)
+            );
+
+        panel1.Dock = System.Windows.Forms.DockStyle.Fill;
+        panel1.Margin = new System.Windows.Forms.Padding(52, 3, 4, 5);
+        layout.Controls.Add(panel1, 0, 0);
+        layout.SetColumnSpan(panel1, 2);
+
+        AddStatRow(layout, label1, progressHP, 1);
+        for (var i = 0; i < extraRows.Length; i++)
+            AddStatRow(layout, extraRows[i].Label, extraRows[i].Value, i + 2);
+
+        var layoutHeight = layout.Padding.Vertical + 34 + 32 * (extraRows.Length + 1);
+        layout.Height = layoutHeight;
+        Controls.Add(layout);
+        layout.BringToFront();
+
+        MinimumSize = new Size(0, layoutHeight);
+        MaximumSize = new Size(0, layoutHeight);
+        Height = layoutHeight;
+
+        ResumeLayout(true);
+    }
+
+    private static void AddStatRow(
+        System.Windows.Forms.TableLayoutPanel layout,
+        System.Windows.Forms.Control label,
+        System.Windows.Forms.Control value,
+        int row
+    )
+    {
+        label.AutoSize = false;
+        label.Dock = System.Windows.Forms.DockStyle.Fill;
+        label.Margin = new System.Windows.Forms.Padding(0, 3, 4, 3);
+        if (label is System.Windows.Forms.Label windowsLabel)
+            windowsLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        value.Dock = System.Windows.Forms.DockStyle.Fill;
+        value.Margin = new System.Windows.Forms.Padding(0, 5, 4, 5);
+
+        layout.Controls.Add(label, 0, row);
+        layout.Controls.Add(value, 1, row);
     }
 }

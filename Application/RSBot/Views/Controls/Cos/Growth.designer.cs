@@ -45,7 +45,7 @@
     System.Drawing.Color.Black
     };
             label2.GradientAnimation = false;
-            label2.Location = new System.Drawing.Point(6, 65);
+            label2.Location = new System.Drawing.Point(12, 81);
             label2.Name = "label2";
             label2.Size = new System.Drawing.Size(41, 20);
             label2.TabIndex = 15;
@@ -62,7 +62,7 @@
     System.Drawing.Color.Black
     };
             label3.GradientAnimation = false;
-            label3.Location = new System.Drawing.Point(9, 86);
+            label3.Location = new System.Drawing.Point(12, 111);
             label3.Name = "label3";
             label3.Size = new System.Drawing.Size(37, 20);
             label3.TabIndex = 16;
@@ -79,7 +79,8 @@
     System.Drawing.Color.Lime
     };
             progressEXP.HatchType = System.Drawing.Drawing2D.HatchStyle.Percent10;
-            progressEXP.Location = new System.Drawing.Point(48, 87);
+            progressEXP.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            progressEXP.Location = new System.Drawing.Point(60, 110);
             progressEXP.Maximum = 100L;
             progressEXP.MaxPercentShowValue = 99.99F;
             progressEXP.Name = "progressEXP";
@@ -87,7 +88,7 @@
             progressEXP.Radius = 1;
             progressEXP.ShowAsPercent = true;
             progressEXP.ShowValue = true;
-            progressEXP.Size = new System.Drawing.Size(180, 16);
+            progressEXP.Size = new System.Drawing.Size(225, 22);
             progressEXP.TabIndex = 12;
             progressEXP.Text = "0,00%";
             progressEXP.Value = 0L;
@@ -103,7 +104,8 @@
     System.Drawing.Color.Yellow
     };
             progressHGP.HatchType = System.Drawing.Drawing2D.HatchStyle.Percent10;
-            progressHGP.Location = new System.Drawing.Point(48, 66);
+            progressHGP.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            progressHGP.Location = new System.Drawing.Point(60, 80);
             progressHGP.Maximum = 100L;
             progressHGP.MaxPercentShowValue = 100F;
             progressHGP.Name = "progressHGP";
@@ -111,7 +113,7 @@
             progressHGP.Radius = 1;
             progressHGP.ShowAsPercent = true;
             progressHGP.ShowValue = true;
-            progressHGP.Size = new System.Drawing.Size(180, 16);
+            progressHGP.Size = new System.Drawing.Size(225, 22);
             progressHGP.TabIndex = 11;
             progressHGP.Text = "0,00%";
             progressHGP.Value = 0L;
@@ -122,10 +124,12 @@
             Controls.Add(label2);
             Controls.Add(progressEXP);
             Controls.Add(progressHGP);
-            MaximumSize = new System.Drawing.Size(242, 110);
-            MinimumSize = new System.Drawing.Size(242, 110);
+            AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
+            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
+            MaximumSize = new System.Drawing.Size(0, 142);
+            MinimumSize = new System.Drawing.Size(0, 142);
             Name = "Growth";
-            Size = new System.Drawing.Size(242, 110);
+            Size = new System.Drawing.Size(302, 142);
             Controls.SetChildIndex(progressHGP, 0);
             Controls.SetChildIndex(progressEXP, 0);
             Controls.SetChildIndex(label2, 0);

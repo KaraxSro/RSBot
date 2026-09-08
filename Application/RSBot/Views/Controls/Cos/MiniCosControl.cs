@@ -21,7 +21,7 @@ public partial class MiniCosControl : DoubleBufferedControl
         set
         {
             _selected = value;
-            panel.BorderColor = value ? Color.Yellow : Color.Transparent;
+            panel.BorderColor = Color.Transparent;
         }
     }
 

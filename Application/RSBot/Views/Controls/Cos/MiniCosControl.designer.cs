@@ -49,7 +49,7 @@
     System.Drawing.Color.Red
     };
             Hp.HatchType = System.Drawing.Drawing2D.HatchStyle.Percent10;
-            Hp.Location = new System.Drawing.Point(3, 41);
+            Hp.Location = new System.Drawing.Point(3, 81);
             Hp.Maximum = 100L;
             Hp.MaxPercentShowValue = 100F;
             Hp.Name = "Hp";
@@ -57,7 +57,7 @@
             Hp.Radius = 1;
             Hp.ShowAsPercent = false;
             Hp.ShowValue = false;
-            Hp.Size = new System.Drawing.Size(34, 5);
+            Hp.Size = new System.Drawing.Size(70, 6);
             Hp.TabIndex = 1;
             Hp.Value = 55L;
             Hp.Click += OnClick_Redirector;
@@ -73,7 +73,7 @@
     System.Drawing.Color.Yellow
     };
             Hgp.HatchType = System.Drawing.Drawing2D.HatchStyle.Percent10;
-            Hgp.Location = new System.Drawing.Point(3, 46);
+            Hgp.Location = new System.Drawing.Point(3, 87);
             Hgp.Maximum = 100L;
             Hgp.MaxPercentShowValue = 100F;
             Hgp.Name = "Hgp";
@@ -81,7 +81,7 @@
             Hgp.Radius = 1;
             Hgp.ShowAsPercent = false;
             Hgp.ShowValue = false;
-            Hgp.Size = new System.Drawing.Size(34, 5);
+            Hgp.Size = new System.Drawing.Size(70, 6);
             Hgp.TabIndex = 2;
             Hgp.Value = 55L;
             Hgp.Click += OnClick_Redirector;
@@ -97,7 +97,7 @@
     System.Drawing.Color.DodgerBlue
     };
             Satiety.HatchType = System.Drawing.Drawing2D.HatchStyle.Percent10;
-            Satiety.Location = new System.Drawing.Point(3, 51);
+            Satiety.Location = new System.Drawing.Point(3, 93);
             Satiety.Maximum = 100L;
             Satiety.MaxPercentShowValue = 100F;
             Satiety.Name = "Satiety";
@@ -105,7 +105,7 @@
             Satiety.Radius = 1;
             Satiety.ShowAsPercent = false;
             Satiety.ShowValue = false;
-            Satiety.Size = new System.Drawing.Size(34, 5);
+            Satiety.Size = new System.Drawing.Size(70, 6);
             Satiety.TabIndex = 3;
             Satiety.Value = 55L;
             Satiety.Click += OnClick_Redirector;
@@ -117,7 +117,7 @@
             Icon.Dock = System.Windows.Forms.DockStyle.Top;
             Icon.Location = new System.Drawing.Point(3, 3);
             Icon.Name = "Icon";
-            Icon.Size = new System.Drawing.Size(34, 38);
+            Icon.Size = new System.Drawing.Size(70, 78);
             Icon.TabIndex = 4;
             Icon.Click += OnClick_Redirector;
             // 
@@ -126,9 +126,9 @@
             Level.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
             Level.AutoSize = true;
             Level.BackColor = System.Drawing.Color.FromArgb(150, 0, 0, 0);
-            Level.Font = new System.Drawing.Font("Arial", 6.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+            Level.Font = new System.Drawing.Font("Arial", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
             Level.ForeColor = System.Drawing.Color.White;
-            Level.Location = new System.Drawing.Point(0, 23);
+            Level.Location = new System.Drawing.Point(2, 59);
             Level.Name = "Level";
             Level.Size = new System.Drawing.Size(26, 12);
             Level.TabIndex = 0;
@@ -138,8 +138,8 @@
             // panel
             // 
             panel.BackColor = System.Drawing.Color.Transparent;
-            panel.Border = new System.Windows.Forms.Padding(1);
-            panel.BorderColor = System.Drawing.Color.Red;
+            panel.Border = new System.Windows.Forms.Padding(0);
+            panel.BorderColor = System.Drawing.Color.Transparent;
             panel.Controls.Add(Satiety);
             panel.Controls.Add(Hgp);
             panel.Controls.Add(Hp);
@@ -150,7 +150,7 @@
             panel.Padding = new System.Windows.Forms.Padding(3);
             panel.Radius = 8;
             panel.ShadowDepth = 4F;
-            panel.Size = new System.Drawing.Size(40, 60);
+            panel.Size = new System.Drawing.Size(76, 102);
             panel.TabIndex = 1;
             panel.Click += OnClick_Redirector;
             // 
@@ -159,9 +159,11 @@
             Controls.Add(panel);
             Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
             Margin = new System.Windows.Forms.Padding(0);
+            MaximumSize = new System.Drawing.Size(78, 104);
+            MinimumSize = new System.Drawing.Size(78, 104);
             Name = "MiniCosControl";
             Padding = new System.Windows.Forms.Padding(1);
-            Size = new System.Drawing.Size(42, 62);
+            Size = new System.Drawing.Size(78, 104);
             Icon.ResumeLayout(false);
             Icon.PerformLayout();
             panel.ResumeLayout(false);

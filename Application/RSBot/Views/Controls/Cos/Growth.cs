@@ -14,6 +14,7 @@ public partial class Growth : CosControlBase
     public Growth()
     {
         InitializeComponent();
+        ArrangeStats((label2, progressHGP), (label3, progressEXP));
         SubscribeEvents();
         MiniCosControl.Satiety.Visible = false;
     }

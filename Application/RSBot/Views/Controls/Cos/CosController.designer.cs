@@ -46,7 +46,7 @@
             // 
             separator.Dock = System.Windows.Forms.DockStyle.Bottom;
             separator.IsVertical = false;
-            separator.Location = new System.Drawing.Point(3, 95);
+            separator.Location = new System.Drawing.Point(3, 111);
             separator.Name = "separator";
             separator.Size = new System.Drawing.Size(242, 4);
             separator.TabIndex = 2;
@@ -54,9 +54,9 @@
             // panel
             // 
             panel.Dock = System.Windows.Forms.DockStyle.Fill;
-            panel.Location = new System.Drawing.Point(3, 63);
+            panel.Location = new System.Drawing.Point(3, 69);
             panel.Name = "panel";
-            panel.Size = new System.Drawing.Size(242, 32);
+            panel.Size = new System.Drawing.Size(242, 42);
             panel.TabIndex = 3;
             // 
             // topPanel
@@ -68,7 +68,7 @@
             topPanel.Dock = System.Windows.Forms.DockStyle.Top;
             topPanel.Location = new System.Drawing.Point(3, 3);
             topPanel.Name = "topPanel";
-            topPanel.Size = new System.Drawing.Size(242, 56);
+            topPanel.Size = new System.Drawing.Size(242, 62);
             topPanel.TabIndex = 4;
             // 
             // panelTopCenter
@@ -76,7 +76,7 @@
             panelTopCenter.Dock = System.Windows.Forms.DockStyle.Fill;
             panelTopCenter.Location = new System.Drawing.Point(23, 0);
             panelTopCenter.Name = "panelTopCenter";
-            panelTopCenter.Size = new System.Drawing.Size(196, 56);
+            panelTopCenter.Size = new System.Drawing.Size(196, 62);
             panelTopCenter.TabIndex = 6;
             // 
             // panelTopRight
@@ -86,7 +86,7 @@
             panelTopRight.Dock = System.Windows.Forms.DockStyle.Right;
             panelTopRight.Location = new System.Drawing.Point(219, 0);
             panelTopRight.Name = "panelTopRight";
-            panelTopRight.Size = new System.Drawing.Size(23, 56);
+            panelTopRight.Size = new System.Drawing.Size(23, 62);
             panelTopRight.TabIndex = 5;
             // 
             // buttonNext
@@ -98,7 +98,7 @@
             buttonNext.Name = "buttonNext";
             buttonNext.Radius = 4;
             buttonNext.ShadowDepth = 4F;
-            buttonNext.Size = new System.Drawing.Size(23, 56);
+            buttonNext.Size = new System.Drawing.Size(23, 62);
             buttonNext.TabIndex = 1;
             buttonNext.Text = "4";
             buttonNext.UseVisualStyleBackColor = true;
@@ -112,7 +112,7 @@
             panelTopLeft.Dock = System.Windows.Forms.DockStyle.Left;
             panelTopLeft.Location = new System.Drawing.Point(0, 0);
             panelTopLeft.Name = "panelTopLeft";
-            panelTopLeft.Size = new System.Drawing.Size(23, 56);
+            panelTopLeft.Size = new System.Drawing.Size(23, 62);
             panelTopLeft.TabIndex = 4;
             // 
             // buttonPrev
@@ -124,7 +124,7 @@
             buttonPrev.Name = "buttonPrev";
             buttonPrev.Radius = 4;
             buttonPrev.ShadowDepth = 4F;
-            buttonPrev.Size = new System.Drawing.Size(23, 56);
+            buttonPrev.Size = new System.Drawing.Size(23, 62);
             buttonPrev.TabIndex = 2;
             buttonPrev.Text = "3";
             buttonPrev.UseVisualStyleBackColor = true;
@@ -135,7 +135,7 @@
             // 
             separator1.Dock = System.Windows.Forms.DockStyle.Top;
             separator1.IsVertical = false;
-            separator1.Location = new System.Drawing.Point(3, 59);
+            separator1.Location = new System.Drawing.Point(3, 65);
             separator1.Name = "separator1";
             separator1.Size = new System.Drawing.Size(242, 4);
             separator1.TabIndex = 5;
@@ -150,7 +150,7 @@
             Controls.Add(separator);
             Name = "CosController";
             Padding = new System.Windows.Forms.Padding(3);
-            Size = new System.Drawing.Size(248, 102);
+            Size = new System.Drawing.Size(248, 118);
             topPanel.ResumeLayout(false);
             panelTopRight.ResumeLayout(false);
             panelTopLeft.ResumeLayout(false);
