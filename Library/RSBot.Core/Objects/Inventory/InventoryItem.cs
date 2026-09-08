@@ -1,12 +1,20 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using RSBot.Core.Client.ReferenceObjects;
 using RSBot.Core.Network;
 using RSBot.Core.Objects.Inventory;
 using RSBot.Core.Objects.Item;
 
 namespace RSBot.Core.Objects;
+
+public enum ItemUseResult
+{
+    Success,
+    Rejected,
+    Timeout,
+}
 
 public class InventoryItem
 {
@@ -167,15 +175,51 @@ public class InventoryItem
         else
             packet.WriteUShort(Record.Tid);
 
-        var asyncCallback = new AwaitCallback(
-            response => response.ReadByte() == 0x01 ? AwaitCallbackResult.Success : AwaitCallbackResult.Fail,
-            0xB04C
-        );
+        var asyncCallback = new AwaitCallback(ParseUseResponse, 0xB04C);
 
         PacketManager.SendPacket(packet, PacketDestination.Server, asyncCallback);
         asyncCallback.AwaitResponse(500);
 
         return asyncCallback.IsCompleted;
+    }
+
+    /// <summary>
+    ///     Uses the item and asynchronously waits for the server response.
+    /// </summary>
+    public async Task<ItemUseResult> UseAsync(int responseTimeout = 2_000)
+    {
+        Log.Debug($"Using item tid: 0x{Record.Tid:x2} {Record.CodeName} {Record}");
+
+        var packet = new Packet(0x704C);
+        packet.WriteByte(Slot);
+
+        if (Game.ClientType > GameClientType.Vietnam)
+            packet.WriteInt(Record.Tid);
+        else
+            packet.WriteUShort(Record.Tid);
+
+        var asyncCallback = new AwaitCallback(ParseUseResponse, 0xB04C);
+
+        PacketManager.SendPacket(packet, PacketDestination.Server, asyncCallback);
+        await asyncCallback.AwaitResponseAsync(responseTimeout);
+
+        if (asyncCallback.IsCompleted)
+            return ItemUseResult.Success;
+
+        return asyncCallback.IsTimedOut ? ItemUseResult.Timeout : ItemUseResult.Rejected;
+    }
+
+    private AwaitCallbackResult ParseUseResponse(Packet response)
+    {
+        if (response.ReadByte() == 0x01)
+        {
+            var sourceSlot = response.ReadByte();
+            return sourceSlot == Slot ? AwaitCallbackResult.Success : AwaitCallbackResult.ConditionFailed;
+        }
+
+        var errorCode = response.ReaderPosition > 0 ? $"0x{response.ReadByte():X2}" : "unknown";
+        Log.Debug($"Item use rejected by server: {Record.CodeName}, error: {errorCode}");
+        return AwaitCallbackResult.Fail;
     }
 
     /// <summary>
@@ -197,10 +241,7 @@ public class InventoryItem
         if (mapId > -1)
             packet.WriteInt(mapId);
 
-        var asyncCallback = new AwaitCallback(
-            response => response.ReadByte() == 0x01 ? AwaitCallbackResult.Success : AwaitCallbackResult.Fail,
-            0xB04C
-        );
+        var asyncCallback = new AwaitCallback(ParseUseResponse, 0xB04C);
 
         PacketManager.SendPacket(packet, PacketDestination.Server, asyncCallback);
         asyncCallback.AwaitResponse(500);

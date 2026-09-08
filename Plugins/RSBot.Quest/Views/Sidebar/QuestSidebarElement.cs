@@ -13,7 +13,6 @@ public partial class QuestSidebarElement : DoubleBufferedControl
 
     public QuestSidebarElement()
     {
-        CheckForIllegalCrossThreadCalls = false;
 
         InitializeComponent();
         SubscribeEvents();

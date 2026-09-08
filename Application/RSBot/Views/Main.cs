@@ -11,6 +11,7 @@ using RSBot.Core;
 using RSBot.Core.Client;
 using RSBot.Core.Components;
 using RSBot.Core.Event;
+using RSBot.Core.Network;
 using RSBot.Core.Plugins;
 using RSBot.Views.Dialog;
 using SDUI;
@@ -32,6 +33,8 @@ public partial class Main : UIWindow
     private string _playerName;
     private readonly Dictionary<string, UIWindow> _pluginWindows = new(8);
     private bool _isWindowLoaded;
+    private bool _shutdownStarted;
+    private bool _shutdownCompleted;
 
     #endregion Members
 
@@ -43,7 +46,6 @@ public partial class Main : UIWindow
     public Main()
     {
         InitializeComponent();
-        CheckForIllegalCrossThreadCalls = false;
         SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
         RegisterEvents();
 
@@ -491,7 +493,7 @@ public partial class Main : UIWindow
     /// <summary>
     ///     Handles the Click event of the btnStartStop control.
     /// </summary>
-    private void btnStartStop_Click(object sender, EventArgs e)
+    private async void btnStartStop_Click(object sender, EventArgs e)
     {
         if (Kernel.Proxy == null)
             return;
@@ -520,9 +522,16 @@ public partial class Main : UIWindow
         else
         {
             Log.NotifyLang("StopingBot", Kernel.Bot.Botbase.Title);
-
-            Kernel.Bot.Stop();
-            Log.StatusLang("Ready");
+            btnStartStop.Enabled = false;
+            try
+            {
+                await Task.Run(Kernel.Bot.Stop);
+                Log.StatusLang("Ready");
+            }
+            finally
+            {
+                btnStartStop.Enabled = true;
+            }
         }
     }
 
@@ -531,29 +540,81 @@ public partial class Main : UIWindow
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="e">The <see cref="FormClosingEventArgs" /> instance containing the event data.</param>
-    private void Main_FormClosing(object sender, FormClosingEventArgs e)
+    private async void Main_FormClosing(object sender, FormClosingEventArgs e)
     {
-        if (Kernel.Proxy == null || !Kernel.Proxy.ClientConnected || !GlobalConfig.Get("RSBot.showExitDialog", true))
-        {
-            GlobalConfig.Save();
-            PlayerConfig.Save();
-            ClientManager.Kill();
-
-            Environment.Exit(0);
-        }
-
-        using var exitDialog = new ExitDialog();
-        if (exitDialog.ShowDialog(this) != DialogResult.Yes)
-        {
-            e.Cancel = true;
+        if (_shutdownCompleted)
             return;
+
+        e.Cancel = true;
+
+        if (_shutdownStarted)
+            return;
+
+        var showExitDialog =
+            Kernel.Proxy != null
+            && Kernel.Proxy.ClientConnected
+            && GlobalConfig.Get("RSBot.showExitDialog", true);
+        if (showExitDialog)
+        {
+            using var exitDialog = new ExitDialog();
+            if (exitDialog.ShowDialog(this) != DialogResult.Yes)
+                return;
         }
 
+        _shutdownStarted = true;
+        Enabled = false;
+
+        try
+        {
+            await ShutdownAsync();
+        }
+        catch (Exception exception)
+        {
+            Log.Error($"Graceful shutdown failed: {exception.Message}");
+            Kernel.Proxy?.Shutdown();
+            ClientManager.Kill();
+        }
+        finally
+        {
+            _shutdownCompleted = true;
+            Close();
+        }
+    }
+
+    private static async Task ShutdownAsync()
+    {
         GlobalConfig.Save();
         PlayerConfig.Save();
-        ClientManager.Kill();
 
-        Environment.Exit(0);
+        if (Kernel.Bot?.Running == true)
+        {
+            try
+            {
+                await Task.Run(Kernel.Bot.Stop);
+            }
+            catch (Exception exception)
+            {
+                Log.Error($"Failed to stop bot during shutdown: {exception.Message}");
+            }
+        }
+
+        if (Kernel.Proxy?.IsConnectedToAgentserver == true && Game.Player != null)
+        {
+            var logoutAcknowledgement = new AwaitCallback(null, 0xB005);
+            var logoutRequest = new Packet(0x7005);
+            logoutRequest.WriteByte(1); // Exit game
+
+            Log.Debug("Sending logout request before closing the client.");
+            PacketManager.SendPacket(logoutRequest, PacketDestination.Server, logoutAcknowledgement);
+            await logoutAcknowledgement.AwaitResponseAsync(2_000);
+
+            if (logoutAcknowledgement.IsTimedOut)
+                Log.Debug("Logout acknowledgement timed out; continuing with connection shutdown.");
+        }
+
+        Kernel.Proxy?.Shutdown();
+        await Task.Delay(100);
+        ClientManager.Kill();
     }
 
     /// <summary>
@@ -580,24 +641,7 @@ public partial class Main : UIWindow
     /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
     private void menuItemExit_Click(object sender, EventArgs e)
     {
-        if (Kernel.Proxy == null || !Kernel.Proxy.ClientConnected || !GlobalConfig.Get("RSBot.showExitDialog", true))
-        {
-            GlobalConfig.Save();
-            PlayerConfig.Save();
-            ClientManager.Kill();
-
-            Environment.Exit(0);
-        }
-
-        using var exitDialog = new ExitDialog();
-        if (exitDialog.ShowDialog(this) != DialogResult.Yes)
-            return;
-
-        GlobalConfig.Save();
-        PlayerConfig.Save();
-        ClientManager.Kill();
-
-        Environment.Exit(0);
+        Close();
     }
 
     /// <summary>

@@ -12,7 +12,6 @@ public partial class Entity : DoubleBufferedControl
 {
     public Entity()
     {
-        CheckForIllegalCrossThreadCalls = false;
         InitializeComponent();
         SubscribeEvents();
     }

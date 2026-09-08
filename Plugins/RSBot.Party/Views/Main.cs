@@ -49,7 +49,6 @@ public partial class Main : DoubleBufferedControl
 
         _selectedBuffingGroup = new ListViewItem();
         _buffings = new List<BuffingPartyMember>();
-        CheckForIllegalCrossThreadCalls = false;
         cbPartySearchPurpose.SelectedIndex = 0;
 
         SubscribeEvents();

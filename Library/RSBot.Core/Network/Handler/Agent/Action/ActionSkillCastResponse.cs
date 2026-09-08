@@ -8,6 +8,9 @@ namespace RSBot.Core.Network.Handler.Agent.Action;
 
 internal class ActionSkillCastResponse : IPacketHandler
 {
+    private const int CooldownLogInterval = 5_000;
+    private static int _lastCooldownLogTick = -CooldownLogInterval;
+
     /// <summary>
     ///     Gets or sets the destination.
     /// </summary>
@@ -48,7 +51,11 @@ internal class ActionSkillCastResponse : IPacketHandler
                     break;
 
                 case 0x05:
-                    Log.Debug("Skill cooldown error. Still have time!");
+                    if (Kernel.TickCount - _lastCooldownLogTick >= CooldownLogInterval)
+                    {
+                        _lastCooldownLogTick = Kernel.TickCount;
+                        Log.Debug("Skill cooldown error. Still have time!");
+                    }
                     break;
 
                 case 0x06: // invalid target

@@ -13,7 +13,6 @@ public partial class Transport : CosControlBase
     public Transport()
     {
         InitializeComponent();
-        CheckForIllegalCrossThreadCalls = false;
 
         SubscribeEvents();
         MiniCosControl.Satiety.Visible = false;

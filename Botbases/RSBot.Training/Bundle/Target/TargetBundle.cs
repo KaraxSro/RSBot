@@ -84,7 +84,7 @@ internal class TargetBundle : IBundle
         var attacker = GetFromCurrentAttackers();
         if (attacker != null && Game.SelectedEntity == null)
         {
-            Log.Debug("[TargetBundle] Emergency situation: Attacking the weaker mob first!");
+            Log.Debug("[TargetBundle] Selecting the weakest attacking mob first!");
 
             if (attacker.TrySelect())
                 Bundles.Movement.LastEntityWasBehindObstacle = false;
@@ -95,10 +95,10 @@ internal class TargetBundle : IBundle
         if (
             attacker != null
             && SpawnManager.TryGetEntity<SpawnedMonster>(Game.SelectedEntity.UniqueId, out var selectedMonster)
-            && (byte)attacker.Rarity < (byte)selectedMonster.Rarity
+            && GetMonsterStrengthPriority(attacker.Rarity) < GetMonsterStrengthPriority(selectedMonster.Rarity)
         )
         {
-            Log.Debug("[TargetBundle] Emergency situation: Found a weaker mob to attack first, switching target!");
+            Log.Debug("[TargetBundle] Found a weaker attacking mob, switching target!");
 
             if (attacker.TrySelect())
                 Bundles.Movement.LastEntityWasBehindObstacle = false;
@@ -130,7 +130,7 @@ internal class TargetBundle : IBundle
     private SpawnedMonster GetFromCurrentAttackers()
     {
         var attackWeakerFirst = PlayerConfig.Get<bool>("RSBot.Training.checkAttackWeakerFirst");
-        if (!attackWeakerFirst || !IsEmergencySituation())
+        if (!attackWeakerFirst)
             return null;
 
         if (
@@ -142,7 +142,7 @@ internal class TargetBundle : IBundle
             return null;
 
         return entities
-            .OrderBy(e => (byte)e.Rarity)
+            .OrderBy(e => GetMonsterStrengthPriority(e.Rarity))
             .ThenBy(e => e.Record.Level)
             .ThenBy(e => e.Position.DistanceToPlayer())
             .FirstOrDefault();
@@ -172,17 +172,29 @@ internal class TargetBundle : IBundle
             return null;
 
         return attackers
-            .OrderBy(monster => (byte)monster.Rarity)
+            .OrderBy(monster => GetMonsterStrengthPriority(monster.Rarity))
             .ThenBy(monster => monster.Record.Level)
             .ThenBy(monster => monster.DistanceToPlayer)
             .FirstOrDefault();
     }
 
-    private bool IsEmergencySituation()
+    private static int GetMonsterStrengthPriority(MonsterRarity rarity)
     {
-        return SpawnManager.Any<SpawnedMonster>(e =>
-            e.AttackingPlayer && e.State.LifeState == LifeState.Alive && Bundles.Avoidance.AvoidMonster(e.Rarity)
-        );
+        return rarity switch
+        {
+            MonsterRarity.General or MonsterRarity.GeneralParty => 0,
+            MonsterRarity.Champion or MonsterRarity.ChampionParty => 1,
+            MonsterRarity.Giant or MonsterRarity.GiantParty => 2,
+            MonsterRarity.Elite or MonsterRarity.EliteParty => 3,
+            MonsterRarity.EliteStrong => 4,
+            MonsterRarity.Unique
+            or MonsterRarity.Unique2
+            or MonsterRarity.UniqueParty
+            or MonsterRarity.Unique2Party => 5,
+            MonsterRarity.Titan or MonsterRarity.TitanParty => 6,
+            MonsterRarity.Event => 7,
+            _ => 8,
+        };
     }
 
     /// <summary>

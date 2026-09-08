@@ -503,9 +503,9 @@
             checkBerzerkAvoidance.MouseLocation = new System.Drawing.Point(-1, -1);
             checkBerzerkAvoidance.Name = "checkBerzerkAvoidance";
             checkBerzerkAvoidance.Ripple = true;
-            checkBerzerkAvoidance.Size = new System.Drawing.Size(343, 30);
+            checkBerzerkAvoidance.Size = new System.Drawing.Size(301, 30);
             checkBerzerkAvoidance.TabIndex = 5;
-            checkBerzerkAvoidance.Text = "If being attacked by a monster type that should be avoided";
+            checkBerzerkAvoidance.Text = "Enter berserk mode when attacked by an avoided monster";
             checkBerzerkAvoidance.UseVisualStyleBackColor = false;
             checkBerzerkAvoidance.CheckedChanged += settings_CheckedChanged;
             // 
@@ -833,9 +833,9 @@
             checkAttackWeakerFirst.MouseLocation = new System.Drawing.Point(-1, -1);
             checkAttackWeakerFirst.Name = "checkAttackWeakerFirst";
             checkAttackWeakerFirst.Ripple = true;
-            checkAttackWeakerFirst.Size = new System.Drawing.Size(263, 30);
+            checkAttackWeakerFirst.Size = new System.Drawing.Size(223, 30);
             checkAttackWeakerFirst.TabIndex = 1;
-            checkAttackWeakerFirst.Text = "If avoided: counter attack weaker mobs first";
+            checkAttackWeakerFirst.Text = "Counter attack weaker mobs first";
             checkAttackWeakerFirst.UseVisualStyleBackColor = false;
             checkAttackWeakerFirst.CheckedChanged += settings_CheckedChanged;
             //

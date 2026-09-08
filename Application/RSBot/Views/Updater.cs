@@ -23,7 +23,6 @@ public partial class Updater : UIWindowBase
     public Updater()
     {
         InitializeComponent();
-        CheckForIllegalCrossThreadCalls = false;
     }
 
     private Version _currentVersion =>

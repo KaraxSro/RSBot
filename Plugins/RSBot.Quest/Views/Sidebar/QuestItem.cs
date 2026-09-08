@@ -12,7 +12,6 @@ public partial class QuestItem : DoubleBufferedControl
 {
     public QuestItem(uint questId)
     {
-        CheckForIllegalCrossThreadCalls = false;
         QuestId = questId;
 
         InitializeComponent();

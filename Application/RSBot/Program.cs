@@ -2,11 +2,13 @@
 using System.Globalization;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 using CommandLine;
 using CommandLine.Text;
 using RSBot.Core;
 using RSBot.Core.Components;
+using RSBot.Core.Event;
 using RSBot.Views;
 
 namespace RSBot;
@@ -89,6 +91,7 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
 
         using Main mainForm = new Main();
+        EventManager.ConfigureUiThread(SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext());
         using SplashScreen splashScreen = new(mainForm);
 
         splashScreen.ShowDialog();

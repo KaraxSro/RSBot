@@ -32,7 +32,6 @@ public partial class Main : DoubleBufferedControl
     /// </summary>
     public Main()
     {
-        CheckForIllegalCrossThreadCalls = false;
 
         InitializeComponent();
         SubscribeEvents();

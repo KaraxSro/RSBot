@@ -14,7 +14,6 @@ public partial class Main : DoubleBufferedControl
 {
     public Main()
     {
-        CheckForIllegalCrossThreadCalls = false;
         InitializeComponent();
 
         SubscribeEvents();

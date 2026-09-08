@@ -34,7 +34,6 @@ public partial class PendingWindow : UIWindowBase
     public PendingWindow()
     {
         InitializeComponent();
-        CheckForIllegalCrossThreadCalls = false;
         Text = "Pending";
 
         EventManager.SubscribeEvent("OnClock", OnClock);

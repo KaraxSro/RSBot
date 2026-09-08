@@ -15,6 +15,7 @@ public static class Kernel
     ///     The updater token source
     /// </summary>
     private static CancellationTokenSource _updaterTokenSource;
+    private static Task _updaterTask;
 
     /// <summary>
     ///     Gets the proxy.
@@ -89,56 +90,58 @@ public static class Kernel
 
         _updaterTokenSource = new CancellationTokenSource();
 
-        Task.Factory.StartNew(
-            ComponentUpdaterAsync,
-            _updaterTokenSource.Token,
-            TaskCreationOptions.LongRunning,
-            TaskScheduler.Current
-        );
+        _updaterTask = Task.Run(() => ComponentUpdaterAsync(_updaterTokenSource.Token));
     }
 
-    private static async Task ComponentUpdaterAsync()
+    private static async Task ComponentUpdaterAsync(CancellationToken cancellationToken)
     {
         var lastTick = TickCount;
         var lastClockTick = TickCount;
 
-        while (!_updaterTokenSource.IsCancellationRequested)
+        try
         {
-            await Task.Delay(10);
-
-            if (TickCount - lastClockTick >= 1000)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                lastClockTick = TickCount;
-                EventManager.FireEvent("OnClock");
+                await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+
+                if (TickCount - lastClockTick >= 1000)
+                {
+                    lastClockTick = TickCount;
+                    EventManager.FireEvent("OnClock");
+                }
+
+                if (!Game.Ready)
+                {
+                    lastTick = TickCount;
+                    continue;
+                }
+
+                try
+                {
+                    var elapsed = TickCount - lastTick;
+
+                    Game.Player.Update(elapsed);
+                    Game.Player.Transport?.Update(elapsed);
+                    Game.Player.JobTransport?.Update(elapsed);
+                    Game.Player.AbilityPet?.Update(elapsed);
+                    Game.Player.Growth?.Update(elapsed);
+                    Game.Player.Fellow?.Update(elapsed);
+
+                    SpawnManager.Update(elapsed);
+
+                    EventManager.FireEvent("OnTick");
+
+                    lastTick = TickCount;
+                }
+                catch (Exception e)
+                {
+                    Log.Fatal(e);
+                }
             }
-
-            if (!Game.Ready)
-            {
-                lastTick = TickCount;
-                continue;
-            }
-
-            try
-            {
-                var elapsed = TickCount - lastTick;
-
-                Game.Player.Update(elapsed);
-                Game.Player.Transport?.Update(elapsed);
-                Game.Player.JobTransport?.Update(elapsed);
-                Game.Player.AbilityPet?.Update(elapsed);
-                Game.Player.Growth?.Update(elapsed);
-                Game.Player.Fellow?.Update(elapsed);
-
-                SpawnManager.Update(elapsed);
-
-                EventManager.FireEvent("OnTick");
-
-                lastTick = TickCount;
-            }
-            catch (Exception e)
-            {
-                Log.Fatal(e);
-            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Expected during application shutdown.
         }
     }
 

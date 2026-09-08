@@ -104,6 +104,11 @@ public class AwaitCallback
     public bool IsCompleted => !_timeout && _invoked && _succeeded;
 
     /// <summary>
+    ///     Gets whether waiting for the response timed out.
+    /// </summary>
+    public bool IsTimedOut => _timeout;
+
+    /// <summary>
     ///     Gets the value indicating whether the <see cref="AwaitCallback" /> is closed.
     /// </summary>
     /// <value>

@@ -26,7 +26,6 @@ public partial class SplashScreen : UIWindowBase
 
         ColorScheme.BackColor = Main.DarkThemeColor;
         BackColor = Main.DarkThemeColor;
-        CheckForIllegalCrossThreadCalls = false;
 
         _mainForm = mainForm;
 

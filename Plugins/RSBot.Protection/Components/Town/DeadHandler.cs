@@ -1,4 +1,6 @@
 ﻿using System.Linq;
+using System;
+using System.Threading;
 using System.Threading.Tasks;
 using RSBot.Core;
 using RSBot.Core.Event;
@@ -9,6 +11,8 @@ namespace RSBot.Protection.Components.Town;
 
 public class DeadHandler : AbstractTownHandler
 {
+    private static int _handlingDeath;
+
     /// <summary>
     ///     Initializes this instance.
     /// </summary>
@@ -34,43 +38,68 @@ public class DeadHandler : AbstractTownHandler
         if (!Kernel.Bot.Running)
             return;
 
-        if (Game.Player.Level < 10)
+        if (Interlocked.CompareExchange(ref _handlingDeath, 1, 0) != 0)
+            return;
+
+        try
         {
-            await Task.Delay(5000);
-            var upPacket = new Packet(0x3053);
-            upPacket.WriteByte(2);
-            PacketManager.SendPacket(upPacket, PacketDestination.Server);
-            return;
+            if (Game.Player.Level < 10)
+            {
+                await Task.Delay(5000);
+                ResurrectAtSpawnPoint(2);
+                return;
+            }
+
+            if (!PlayerConfig.Get<bool>("RSBot.Protection.checkDead"))
+                return;
+
+            if (Game.Player.State.LifeState != LifeState.Dead)
+                return;
+
+            var itemsToUse = PlayerConfig.GetArray<string>("RSBot.Inventory.AutoUseAccordingToPurpose");
+            var inventoryItem = Game.Player.Inventory.GetItem(
+                new TypeIdFilter(3, 3, 13, 6),
+                p => itemsToUse.Contains(p.Record.CodeName)
+            );
+            if (inventoryItem != null)
+            {
+                var result = await inventoryItem.UseAsync();
+                if (await WaitForResurrection(5_000))
+                    return;
+
+                Log.Warn(
+                    $"Resurrection item [{inventoryItem.Record.GetRealName()}] did not resurrect the player ({result})."
+                );
+            }
+
+            var timeOut = PlayerConfig.Get("RSBot.Protection.numDeadTimeout", 30);
+            Log.WarnLang("ResurrectSPointSeconds", timeOut);
+            await Task.Delay(timeOut * 1000);
+
+            if (Game.Player?.State.LifeState != LifeState.Dead)
+                return;
+
+            ResurrectAtSpawnPoint(1);
         }
-
-        if (!PlayerConfig.Get<bool>("RSBot.Protection.checkDead"))
-            return;
-
-        if (Game.Player.State.LifeState != LifeState.Dead)
-            return;
-
-        var itemsToUse = PlayerConfig.GetArray<string>("RSBot.Inventory.AutoUseAccordingToPurpose");
-        var inventoryItem = Game.Player.Inventory.GetItem(
-            new TypeIdFilter(3, 3, 13, 6),
-            p => itemsToUse.Contains(p.Record.CodeName)
-        );
-        if (inventoryItem != null)
+        finally
         {
-            inventoryItem.Use();
-            return;
+            Interlocked.Exchange(ref _handlingDeath, 0);
         }
+    }
 
-        var timeOut = PlayerConfig.Get("RSBot.Protection.numDeadTimeout", 30);
+    private static async Task<bool> WaitForResurrection(int timeout)
+    {
+        var deadline = Environment.TickCount64 + timeout;
+        while (Game.Player?.State.LifeState == LifeState.Dead && Environment.TickCount64 < deadline)
+            await Task.Delay(100);
 
-        Log.WarnLang("ResurrectSPointSeconds", timeOut);
+        return Game.Player?.State.LifeState == LifeState.Alive;
+    }
 
-        await Task.Delay(timeOut * 1000);
-
-        if (Game.Player.State.LifeState != LifeState.Dead)
-            return;
-
+    private static void ResurrectAtSpawnPoint(byte mode)
+    {
         var packet = new Packet(0x3053);
-        packet.WriteByte(1);
+        packet.WriteByte(mode);
         PacketManager.SendPacket(packet, PacketDestination.Server); //Only works if not teleporting at that moment
     }
 }

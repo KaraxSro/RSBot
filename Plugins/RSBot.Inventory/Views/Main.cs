@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
@@ -55,10 +56,15 @@ public partial class Main : DoubleBufferedControl
         EventManager.SubscribeEvent("OnLoadCharacter", OnLoadCharacter);
         EventManager.SubscribeEvent("OnUpdateInventoryItem", new Action<byte>(OnUpdateInventoryItem));
         EventManager.SubscribeEvent("OnUseItem", new Action<byte>(OnUpdateInventoryItem));
-        EventManager.SubscribeEvent("OnInventoryUpdate", UpdateInventoryList);
+        EventManager.SubscribeEvent("OnInventoryUpdate", OnInventoryUpdate);
     }
 
     private void OnLoadCharacter()
+    {
+        UpdateInventoryList(true);
+    }
+
+    private void OnInventoryUpdate()
     {
         UpdateInventoryList();
     }
@@ -81,220 +87,142 @@ public partial class Main : DoubleBufferedControl
 
             var listViewItem = listViewMain.Items[key];
 
-            var name = inventoryItem.Record.GetRealName();
-            if (inventoryItem.OptLevel > 0)
-                name += " (+" + inventoryItem.OptLevel + ")";
-
-            listViewItem.SubItems[0].Text = name;
-            listViewItem.SubItems[1].Text = inventoryItem.Amount.ToString();
-
-            if (inventoryItem.Record.IsEquip)
-                listViewItem.SubItems[2].Text = inventoryItem.Record.GetRarityName();
-
-            listViewItem.LoadItemImageAsync(inventoryItem.Record);
+            UpdateListViewItem(listViewItem, inventoryItem);
         }
     }
 
     /// <summary>
     ///     Updates the inventory list.
     /// </summary>
-    public void UpdateInventoryList()
+    public void UpdateInventoryList(bool rebuild = false)
     {
-        if (!Visible)
-            return;
-
-        if (Game.Player == null)
+        if (!Visible || Game.Player == null)
             return;
 
         lock (_lock)
         {
+            var topItemKey = rebuild ? null : listViewMain.TopItem?.Name;
+            var items = GetVisibleItems();
+
             listViewMain.BeginUpdate();
-            listViewMain.Items.Clear();
-
-            switch (_selectedIndex)
+            try
             {
-                case 0:
-                    var itemsPlayer = Game.Player.Inventory.GetNormalPartItems();
-                    foreach (var item in itemsPlayer)
-                        AddItem(item);
+                if (rebuild)
+                    listViewMain.Items.Clear();
 
-                    lblFreeSlots.Text = Game.Player.Inventory.FreeSlots + "/" + Game.Player.Inventory.NormalPartSize;
-                    pbInventoryStatus.Value = Game.Player.Inventory.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.Inventory.NormalPartSize;
-                    break;
-
-                case 1:
-
-                    var items = Game.Player.Inventory.GetEquippedPartItems();
-                    foreach (var item in items)
-                        AddItem(item);
-
-                    int maxSlots =
-                        (
-                            Game.ClientType == GameClientType.Global
-                            || Game.ClientType == GameClientType.Korean
-                            || Game.ClientType == GameClientType.VTC_Game
-                            || Game.ClientType == GameClientType.RuSro
-                            || Game.ClientType == GameClientType.Turkey
-                            || Game.ClientType == GameClientType.Taiwan
-                            || Game.ClientType == GameClientType.Japanese
-                        )
-                            ? 17
-                            : 13; //4 slots for relics
-
-                    lblFreeSlots.Text = (maxSlots - items.Count) + " / " + maxSlots;
-
-                    pbInventoryStatus.Value = (maxSlots - items.Count);
-                    pbInventoryStatus.Maximum = maxSlots;
-
-                    break;
-
-                case 2:
-
-                    foreach (var item in Game.Player.Avatars)
-                        AddItem(item);
-
-                    lblFreeSlots.Text = Game.Player.Avatars.FreeSlots + " / " + Game.Player.Avatars.Capacity;
-
-                    pbInventoryStatus.Value = Game.Player.Avatars.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.Avatars.Capacity;
-
-                    break;
-
-                case 3:
-
-                    if (!Game.Player.HasActiveAbilityPet)
-                    {
-                        listViewMain.EndUpdate();
-                        return;
-                    }
-
-                    foreach (var item in Game.Player.AbilityPet.Inventory)
-                        AddItem(item);
-
-                    lblFreeSlots.Text =
-                        Game.Player.AbilityPet.Inventory.FreeSlots + "/" + Game.Player.AbilityPet.Inventory.Capacity;
-
-                    pbInventoryStatus.Value = Game.Player.AbilityPet.Inventory.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.AbilityPet.Inventory.Capacity;
-
-                    break;
-
-                case 4:
-
-                    if (Game.Player.Storage == null)
-                    {
-                        listViewMain.EndUpdate();
-                        return;
-                    }
-
-                    foreach (var item in Game.Player.Storage)
-                        AddItem(item);
-
-                    lblFreeSlots.Text = Game.Player.Storage.FreeSlots + "/" + Game.Player.Storage.Capacity;
-
-                    pbInventoryStatus.Value = Game.Player.Storage.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.Storage.Capacity;
-
-                    break;
-
-                case 5:
-
-                    if (Game.Player.GuildStorage == null)
-                    {
-                        listViewMain.EndUpdate();
-                        return;
-                    }
-
-                    foreach (var item in Game.Player.GuildStorage)
-                        AddItem(item);
-
-                    lblFreeSlots.Text = Game.Player.GuildStorage.FreeSlots + "/" + Game.Player.GuildStorage.Capacity;
-
-                    pbInventoryStatus.Value = Game.Player.GuildStorage.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.GuildStorage.Capacity;
-
-                    break;
-
-                case 6:
-
-                    if (Game.Player.JobTransport == null)
-                    {
-                        listViewMain.EndUpdate();
-                        return;
-                    }
-
-                    foreach (var item in Game.Player.JobTransport.Inventory)
-                        AddItem(item);
-
-                    lblFreeSlots.Text =
-                        Game.Player.JobTransport.Inventory.FreeSlots
-                        + "/"
-                        + Game.Player.JobTransport.Inventory.Capacity;
-
-                    pbInventoryStatus.Value = Game.Player.JobTransport.Inventory.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.JobTransport.Inventory.Capacity;
-
-                    break;
-
-                case 7:
-
-                    if (Game.Player.Job2SpecialtyBag == null)
-                    {
-                        listViewMain.EndUpdate();
-                        return;
-                    }
-
-                    foreach (var item in Game.Player.Job2SpecialtyBag)
-                        AddItem(item);
-
-                    lblFreeSlots.Text =
-                        Game.Player.Job2SpecialtyBag.FreeSlots + "/" + Game.Player.Job2SpecialtyBag.Capacity;
-
-                    pbInventoryStatus.Value = Game.Player.Job2SpecialtyBag.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.Job2SpecialtyBag.Capacity;
-
-                    break;
-
-                case 8:
-
-                    if (Game.Player.Job2 == null)
-                    {
-                        listViewMain.EndUpdate();
-                        return;
-                    }
-
-                    foreach (var item in Game.Player.Job2)
-                        AddItem(item);
-
-                    lblFreeSlots.Text = Game.Player.Job2.FreeSlots + "/" + Game.Player.Job2.Capacity;
-
-                    pbInventoryStatus.Value = Game.Player.Job2.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.Job2.Capacity;
-
-                    break;
-
-                case 9:
-
-                    if (!Game.Player.HasActiveFellowPet)
-                    {
-                        listViewMain.EndUpdate();
-                        return;
-                    }
-
-                    foreach (var item in Game.Player.Fellow.Inventory)
-                        AddItem(item);
-
-                    lblFreeSlots.Text =
-                        Game.Player.Fellow.Inventory.FreeSlots + "/" + Game.Player.Fellow.Inventory.Capacity;
-
-                    pbInventoryStatus.Value = Game.Player.Fellow.Inventory.FreeSlots;
-                    pbInventoryStatus.Maximum = Game.Player.Fellow.Inventory.Capacity;
-
-                    break;
+                SynchronizeItems(items);
+            }
+            finally
+            {
+                listViewMain.EndUpdate();
             }
 
-            listViewMain.EndUpdate();
+            if (topItemKey != null && listViewMain.Items.ContainsKey(topItemKey))
+                listViewMain.TopItem = listViewMain.Items[topItemKey];
+        }
+    }
+
+    private IReadOnlyList<InventoryItem> GetVisibleItems()
+    {
+        switch (_selectedIndex)
+        {
+            case 0:
+                var inventoryItems = Game.Player.Inventory.GetNormalPartItems();
+                UpdateCapacity(Game.Player.Inventory.FreeSlots, Game.Player.Inventory.NormalPartSize);
+                return inventoryItems.ToList();
+
+            case 1:
+                var equippedItems = Game.Player.Inventory.GetEquippedPartItems();
+                var maxSlots =
+                    Game.ClientType == GameClientType.Global
+                    || Game.ClientType == GameClientType.Korean
+                    || Game.ClientType == GameClientType.VTC_Game
+                    || Game.ClientType == GameClientType.RuSro
+                    || Game.ClientType == GameClientType.Turkey
+                    || Game.ClientType == GameClientType.Taiwan
+                    || Game.ClientType == GameClientType.Japanese
+                        ? 17
+                        : 13; //4 slots for relics
+                UpdateCapacity(maxSlots - equippedItems.Count, maxSlots, true);
+                return equippedItems.ToList();
+
+            case 2:
+                UpdateCapacity(Game.Player.Avatars.FreeSlots, Game.Player.Avatars.Capacity, true);
+                return Game.Player.Avatars.ToList();
+
+            case 3 when Game.Player.HasActiveAbilityPet:
+                UpdateCapacity(Game.Player.AbilityPet.Inventory.FreeSlots, Game.Player.AbilityPet.Inventory.Capacity);
+                return Game.Player.AbilityPet.Inventory.ToList();
+
+            case 4 when Game.Player.Storage != null:
+                UpdateCapacity(Game.Player.Storage.FreeSlots, Game.Player.Storage.Capacity);
+                return Game.Player.Storage.ToList();
+
+            case 5 when Game.Player.GuildStorage != null:
+                UpdateCapacity(Game.Player.GuildStorage.FreeSlots, Game.Player.GuildStorage.Capacity);
+                return Game.Player.GuildStorage.ToList();
+
+            case 6 when Game.Player.JobTransport != null:
+                UpdateCapacity(
+                    Game.Player.JobTransport.Inventory.FreeSlots,
+                    Game.Player.JobTransport.Inventory.Capacity
+                );
+                return Game.Player.JobTransport.Inventory.ToList();
+
+            case 7 when Game.Player.Job2SpecialtyBag != null:
+                UpdateCapacity(Game.Player.Job2SpecialtyBag.FreeSlots, Game.Player.Job2SpecialtyBag.Capacity);
+                return Game.Player.Job2SpecialtyBag.ToList();
+
+            case 8 when Game.Player.Job2 != null:
+                UpdateCapacity(Game.Player.Job2.FreeSlots, Game.Player.Job2.Capacity);
+                return Game.Player.Job2.ToList();
+
+            case 9 when Game.Player.HasActiveFellowPet:
+                UpdateCapacity(Game.Player.Fellow.Inventory.FreeSlots, Game.Player.Fellow.Inventory.Capacity);
+                return Game.Player.Fellow.Inventory.ToList();
+
+            default:
+                return Array.Empty<InventoryItem>();
+        }
+    }
+
+    private void UpdateCapacity(int freeSlots, int capacity, bool spaced = false)
+    {
+        lblFreeSlots.Text = spaced ? $"{freeSlots} / {capacity}" : $"{freeSlots}/{capacity}";
+        pbInventoryStatus.Maximum = capacity;
+        pbInventoryStatus.Value = Math.Min(freeSlots, capacity);
+    }
+
+    private void SynchronizeItems(IReadOnlyList<InventoryItem> items)
+    {
+        var itemKeys = items.Select(item => item.Slot.ToString()).ToHashSet();
+
+        for (var index = listViewMain.Items.Count - 1; index >= 0; index--)
+        {
+            if (!itemKeys.Contains(listViewMain.Items[index].Name))
+                listViewMain.Items.RemoveAt(index);
+        }
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            var inventoryItem = items[index];
+            var key = inventoryItem.Slot.ToString();
+
+            if (listViewMain.Items.ContainsKey(key))
+            {
+                var listViewItem = listViewMain.Items[key];
+                UpdateListViewItem(listViewItem, inventoryItem);
+
+                if (listViewItem.Index != index)
+                {
+                    listViewMain.Items.Remove(listViewItem);
+                    listViewMain.Items.Insert(index, listViewItem);
+                }
+            }
+            else
+            {
+                AddItem(inventoryItem, index);
+            }
         }
     }
 
@@ -302,7 +230,7 @@ public partial class Main : DoubleBufferedControl
     ///     Adds the item.
     /// </summary>
     /// <param name="item">The item.</param>
-    private void AddItem(InventoryItem item)
+    private void AddItem(InventoryItem item, int index = -1)
     {
         if (item == null)
             return;
@@ -311,12 +239,10 @@ public partial class Main : DoubleBufferedControl
         if (item.OptLevel > 0)
             name += " (+" + item.OptLevel + ")";
 
-        var lvItem = listViewMain.Items.Add(item.Slot.ToString(), name, 0);
+        var lvItem = new ListViewItem(name, 0) { Name = item.Slot.ToString() };
         lvItem.Tag = item;
         lvItem.SubItems.Add(item.Amount.ToString());
-
-        if (item.Record.IsEquip)
-            lvItem.SubItems.Add(item.Record.GetRarityName());
+        lvItem.SubItems.Add(item.Record.IsEquip ? item.Record.GetRarityName() : string.Empty);
 
         if (_selectedIndex == 0)
         {
@@ -327,6 +253,38 @@ public partial class Main : DoubleBufferedControl
         }
 
         lvItem.LoadItemImageAsync(item.Record);
+
+        if (index < 0 || index >= listViewMain.Items.Count)
+            listViewMain.Items.Add(lvItem);
+        else
+            listViewMain.Items.Insert(index, lvItem);
+    }
+
+    private void UpdateListViewItem(ListViewItem listViewItem, InventoryItem item)
+    {
+        var previousItem = listViewItem.Tag as InventoryItem;
+        var name = item.Record?.GetRealName() ?? "";
+        if (item.OptLevel > 0)
+            name += " (+" + item.OptLevel + ")";
+
+        while (listViewItem.SubItems.Count < 3)
+            listViewItem.SubItems.Add(string.Empty);
+
+        listViewItem.Tag = item;
+        listViewItem.Text = name;
+        listViewItem.SubItems[1].Text = item.Amount.ToString();
+        listViewItem.SubItems[2].Text = item.Record.IsEquip ? item.Record.GetRarityName() : string.Empty;
+
+        if (_selectedIndex == 0)
+        {
+            var useItemsAtTrainingPlace = PlayerConfig.GetArray<string>("RSBot.Inventory.ItemsAtTrainplace");
+            var shouldBeBold = useItemsAtTrainingPlace.Contains(item.Record.CodeName);
+            if (listViewItem.Font.Bold != shouldBeBold)
+                listViewItem.Font = shouldBeBold ? new Font(listViewItem.Font, FontStyle.Bold) : listViewMain.Font;
+        }
+
+        if (previousItem?.Record?.CodeName != item.Record.CodeName)
+            listViewItem.LoadItemImageAsync(item.Record);
     }
 
     /// <summary>
@@ -405,7 +363,7 @@ public partial class Main : DoubleBufferedControl
             control.Invalidate();
         }
 
-        UpdateInventoryList();
+        UpdateInventoryList(true);
     }
 
     private void dropToolStripMenuItem_Click(object sender, EventArgs e)
@@ -436,6 +394,7 @@ public partial class Main : DoubleBufferedControl
 
         if (_selectedIndex != 0)
         {
+            autoUseAccordingToPurposeToolStripMenuItem.Visible = false;
             useToolStripMenuItem.Visible = false;
             moveToLastDeathPositionToolStripMenuItem.Visible = false;
             moveToLastRecallPositionToolStripMenuItem.Visible = false;
@@ -445,7 +404,9 @@ public partial class Main : DoubleBufferedControl
             return;
         }
 
+        autoUseAccordingToPurposeToolStripMenuItem.Visible = true;
         var canUse = (inventoryItem.Record.CanUse & ObjectUseType.Yes) != 0;
+        var canUseAccordingToPurpose = canUse && IsPurposeItem(inventoryItem);
         if (canUse)
         {
             var useItems = PlayerConfig.GetArray<string>("RSBot.Inventory.ItemsAtTrainplace");
@@ -454,7 +415,7 @@ public partial class Main : DoubleBufferedControl
 
             var purposiveItems = PlayerConfig.GetArray<string>("RSBot.Inventory.AutoUseAccordingToPurpose");
             autoUseAccordingToPurposeToolStripMenuItem.Checked = purposiveItems.Contains(inventoryItem.Record.CodeName);
-            autoUseAccordingToPurposeToolStripMenuItem.Enabled = true;
+            autoUseAccordingToPurposeToolStripMenuItem.Enabled = canUseAccordingToPurpose;
         }
         else
         {
@@ -624,7 +585,7 @@ public partial class Main : DoubleBufferedControl
 
         var itemsToUse = PlayerConfig.GetArray<string>("RSBot.Inventory.AutoUseAccordingToPurpose").ToList();
         var selectedItem = (InventoryItem)lvItem.Tag;
-        if (selectedItem == null)
+        if (selectedItem == null || !IsPurposeItem(selectedItem))
             return;
 
         var useSelectedItem = itemsToUse.Contains(selectedItem.Record.CodeName);
@@ -640,8 +601,13 @@ public partial class Main : DoubleBufferedControl
             itemsToUse.Add(selectedItem.Record.CodeName);
         }
 
-        useItemAtTrainingPlaceMenuItem.Checked = !useItemAtTrainingPlaceMenuItem.Checked;
+        autoUseAccordingToPurposeToolStripMenuItem.Checked = !autoUseAccordingToPurposeToolStripMenuItem.Checked;
         PlayerConfig.SetArray("RSBot.Inventory.AutoUseAccordingToPurpose", itemsToUse);
+    }
+
+    private static bool IsPurposeItem(InventoryItem item)
+    {
+        return item.Equals(new TypeIdFilter(3, 3, 13, 6)) || item.Equals(new TypeIdFilter(3, 3, 13, 7));
     }
 
     /// <summary>

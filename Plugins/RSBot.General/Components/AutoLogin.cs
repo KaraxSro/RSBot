@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using RSBot.Core;
 using RSBot.Core.Components;
-using RSBot.Core.Cryptography;
 using RSBot.Core.Event;
 using RSBot.Core.Network;
 using RSBot.Core.Network.Protocol;
@@ -26,7 +25,7 @@ internal static class AutoLogin
     /// <summary>
     ///     Is the auto login handling <c>true</c> otherwise; <c>false</c>
     /// </summary>
-    private static int _busy;
+    private static bool _busy;
 
     /// <summary>
     ///     Does the automatic login.
@@ -36,140 +35,79 @@ internal static class AutoLogin
         if (Pending)
             return;
 
-        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
+        if (_busy)
             return;
 
         Log.StatusLang("WaitingUser");
 
-        try
+        _busy = true;
+
+        if (!GlobalConfig.Get<bool>("RSBot.General.EnableAutomatedLogin"))
         {
-            if (!GlobalConfig.Get<bool>("RSBot.General.EnableAutomatedLogin"))
-                return;
-
-            var selectedAccount = GetSelectedAccount();
-            if (selectedAccount == null)
-            {
-                Log.WarnLang("NoHaveAccountForAutoLogin");
-                await Task.Delay(5000);
-                ClientlessManager.RequestServerList();
-                return;
-            }
-
-            var server = Serverlist.GetServerByName(selectedAccount.Servername);
-            if (server == null)
-            {
-                Log.NotifyLang("ServerNotFound", selectedAccount.Servername);
-
-                server = Serverlist.Servers?.FirstOrDefault();
-                if (server == null)
-                {
-                    Log.Warn("The server list is empty. Auto login will retry.");
-                    await Task.Delay(5000);
-                    ClientlessManager.RequestServerList();
-                    return;
-                }
-
-                Log.NotifyLang("SelectedFirstServer", server.Name);
-            }
-
-            // is server check [Lazy :)]
-            if (!server.Status)
-            {
-                Log.NotifyLang("ServerCheck");
-
-                await Task.Delay(5000);
-                ClientlessManager.RequestServerList();
-
-                return;
-            }
-
-            //Wait for the configured delay before sending the login request
-            //It is possible to cancel in case of manual login to the server
-            if (GlobalConfig.Get("RSBot.General.EnableLoginDelay", false))
-            {
-                var delay = GlobalConfig.Get("RSBot.General.LoginDelay", 10) * 1000;
-                Cts = new CancellationTokenSource();
-
-                try
-                {
-                    await Task.Delay(delay, Cts.Token);
-                }
-                catch (TaskCanceledException)
-                {
-                    Log.Debug("Manual login has been detected. AutoLogin is cancelled this time!");
-                    return;
-                }
-                finally
-                {
-                    Cts.Dispose();
-                    Cts = null;
-                }
-            }
-
-            SendLoginRequest(selectedAccount, server);
+            _busy = false;
+            return;
         }
-        catch (Exception ex)
-        {
-            Log.Error($"Auto login failed unexpectedly: {ex.Message}");
-        }
-        finally
-        {
-            Volatile.Write(ref _busy, 0);
-        }
-    }
 
-    internal static Packet CreateAgentLoginRequest(ushort opcode, bool encrypted)
-    {
-        if (!GlobalConfig.Get<bool>("RSBot.General.EnableAutomatedLogin") || Game.Clientless)
-            return null;
-
-        var selectedAccount = GetSelectedAccount();
+        var selectedAccount = Accounts.SavedAccounts?.Find(p =>
+            p.Username == GlobalConfig.Get<string>("RSBot.General.AutoLoginAccountUsername")
+        );
         if (selectedAccount == null)
-            return null;
-
-        var packet = new Packet(opcode, encrypted);
-        packet.WriteUInt(Kernel.Proxy.Token);
-
-        if (Game.ClientType == GameClientType.RuSro)
         {
-            packet.WriteString(GlobalConfig.Get<string>("RSBot.RuSro.login"));
-            packet.WriteString(Sha256.ComputeHash(GlobalConfig.Get<string>("RSBot.RuSro.password")));
-        }
-        else if (Game.ClientType == GameClientType.Japanese)
-        {
-            packet.WriteString(GlobalConfig.Get<string>("RSBot.JSRO.login"));
-            packet.WriteString(Sha256.ComputeHash(GlobalConfig.Get<string>("RSBot.JSRO.token")));
-        }
-        else
-        {
-            if (Game.ClientType == GameClientType.Global && selectedAccount.Channel == 0x02)
-                packet.WriteString(GlobalConfig.Get<string>("RSBot.JCPlanet.login"));
-            else
-                packet.WriteString(selectedAccount.Username);
-
-            if (
-                Game.ClientType == GameClientType.Turkey
-                || Game.ClientType == GameClientType.VTC_Game
-                || Game.ClientType == GameClientType.Global
-                || Game.ClientType == GameClientType.Korean
-                || Game.ClientType == GameClientType.Taiwan
-            )
-                packet.WriteString(Sha256.ComputeHash(selectedAccount.Password));
-            else
-                packet.WriteString(selectedAccount.Password);
+            _busy = false;
+            Log.WarnLang("NoHaveAccountForAutoLogin");
+            await Task.Delay(5000);
+            ClientlessManager.RequestServerList();
+            return;
         }
 
-        packet.WriteByte(Game.ReferenceManager.DivisionInfo.Locale);
-        packet.WriteBytes(Game.MacAddress);
-        packet.Lock();
+        var server = Serverlist.GetServerByName(selectedAccount.Servername);
+        if (server == null && Serverlist.Servers != null)
+        {
+            Log.NotifyLang("ServerNotFound", selectedAccount.Servername);
 
-        return packet;
-    }
+            server = Serverlist.Servers.First();
 
-    private static Account GetSelectedAccount()
-    {
-        var username = GlobalConfig.Get<string>("RSBot.General.AutoLoginAccountUsername");
-        return Accounts.SavedAccounts?.Find(account => account.Username == username);
+            Log.NotifyLang("SelectedFirstServer", server.Name);
+        }
+
+        // is server check [Lazy :)]
+        if (!server.Status)
+        {
+            _busy = false;
+
+            Log.NotifyLang("ServerCheck");
+
+            await Task.Delay(5000);
+            ClientlessManager.RequestServerList();
+
+            return;
+        }
+
+        //Wait for the configured delay before sending the login request
+        //It is possible to cancel in case of manual login to the server
+        if (GlobalConfig.Get("RSBot.General.EnableLoginDelay", false))
+        {
+            var delay = GlobalConfig.Get("RSBot.General.LoginDelay", 10) * 1000;
+            Cts = new CancellationTokenSource();
+
+            try
+            {
+                await Task.Delay(delay, Cts.Token);
+            }
+            catch (TaskCanceledException)
+            {
+                _busy = false;
+                Log.Debug("Manual login has been detected. AutoLogin is cancelled this time!");
+                return;
+            }
+            finally
+            {
+                Cts.Dispose();
+                Cts = null;
+            }
+        }
+
+        SendLoginRequest(selectedAccount, server);
     }
 
     /// <summary>
@@ -257,6 +195,8 @@ internal static class AutoLogin
 
         Accounts.Joined = account;
         Serverlist.Joining = server;
+
+        _busy = false;
     }
 
     /// <summary>

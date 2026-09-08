@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using RSBot.Core;
 using RSBot.Core.Event;
 using RSBot.Core.Objects;
@@ -18,7 +20,7 @@ public class DurabilityLowHandler : AbstractTownHandler
     /// </summary>
     /// <remarks>This field is intended for internal use to track the busy state of the system. It should not
     /// be accessed directly outside of the class.</remarks>
-    private static bool _isBusy = false;
+    private static int _isBusy;
 
     /// <summary>
     ///     Initializes this instance.
@@ -42,7 +44,7 @@ public class DurabilityLowHandler : AbstractTownHandler
     /// </summary>
     /// <param name="slot">The slot.</param>
     /// <param name="durability">The durability.</param>
-    private static void OnTick()
+    private static async void OnTick()
     {
         if (!Kernel.Bot.Running)
             return;
@@ -56,37 +58,58 @@ public class DurabilityLowHandler : AbstractTownHandler
         if (PlayerInTownScriptRegion())
             return;
 
-        if (_isBusy)
+        if (Interlocked.CompareExchange(ref _isBusy, 1, 0) != 0)
             return;
 
-        _isBusy = true;
-
-        _lastTick = Kernel.TickCount;
-
-        for (byte slot = 0; slot < 8; slot++)
+        try
         {
-            var item = Game.Player.Inventory.GetItemAt(slot);
-            if (item == null || !item.Record.IsEquip || item.Durability > 6)
-                continue;
+            _lastTick = Kernel.TickCount;
 
-            var itemsToUse = PlayerConfig.GetArray<string>("RSBot.Inventory.AutoUseAccordingToPurpose");
-            var inventoryItem = Game.Player.Inventory.GetItem(
-                new TypeIdFilter(3, 3, 13, 7),
-                p => itemsToUse.Contains(p.Record.CodeName)
-            );
-            if (inventoryItem != null)
+            for (byte slot = 0; slot < 8; slot++)
             {
-                inventoryItem.Use();
-                return;
+                var item = Game.Player.Inventory.GetItemAt(slot);
+                if (item == null || !item.Record.IsEquip || item.Durability > 6)
+                    continue;
+
+                var itemsToUse = PlayerConfig.GetArray<string>("RSBot.Inventory.AutoUseAccordingToPurpose");
+                var inventoryItem = Game.Player.Inventory.GetItem(
+                    new TypeIdFilter(3, 3, 13, 7),
+                    p => itemsToUse.Contains(p.Record.CodeName)
+                );
+                if (inventoryItem != null)
+                {
+                    var result = await inventoryItem.UseAsync();
+                    if (await WaitForRepair(slot, 3_000))
+                        return;
+
+                    Log.Warn($"Repair item [{inventoryItem.Record.GetRealName()}] failed ({result}).");
+                }
+
+                if (Game.Player?.UseReturnScroll() == true)
+                    Log.WarnLang("ReturnToTownDurLow", item.Record.GetRealName());
+
+                break;
             }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isBusy, 0);
+        }
+    }
 
-            if (Game.Player.UseReturnScroll())
-                Log.WarnLang("ReturnToTownDurLow", item.Record.GetRealName());
+    private static async Task<bool> WaitForRepair(byte slot, int timeout)
+    {
+        var deadline = Environment.TickCount64 + timeout;
+        while (Environment.TickCount64 < deadline)
+        {
+            var item = Game.Player?.Inventory.GetItemAt(slot);
+            if (item == null || item.Durability > 6)
+                return true;
 
-            break;
+            await Task.Delay(100);
         }
 
-        _isBusy = false;
+        return false;
     }
 
     /// <summary>

@@ -17,6 +17,8 @@ namespace RSBot.Core.Objects;
 
 public class Player : SpawnedBionic
 {
+    private const int ItemUseFailureRetryDelay = 1000;
+
     /// <summary>
     ///     Gets or sets the last hp potion item duration
     /// </summary>
@@ -789,6 +791,9 @@ public class Player : SpawnedBionic
             }
             else
             {
+                // Do not retry on every bot tick when the acknowledgement is late or rejected.
+                // Keep the normal cooldown on success, but allow a failed attempt to retry after one second.
+                tick = Kernel.TickCount - Math.Max(0, duration - ItemUseFailureRetryDelay);
                 Log.Debug(
                     $"[ERROR] Potion [{potionItem.Record.GetRealName()}] used Elapsed:{elapsed} Duration:{duration} Condition:{elapsed < duration}"
                 );
@@ -843,6 +848,8 @@ public class Player : SpawnedBionic
         var result = slotItem.Use();
         if (result)
             _lastUniversalPillTick = Kernel.TickCount;
+        else
+            _lastUniversalPillTick = Kernel.TickCount - (1050 - ItemUseFailureRetryDelay);
 
         return result;
     }
@@ -867,6 +874,8 @@ public class Player : SpawnedBionic
         var result = slotItem.Use();
         if (result)
             _lastPurificationPillTick = Kernel.TickCount;
+        else
+            _lastPurificationPillTick = Kernel.TickCount - (20050 - ItemUseFailureRetryDelay);
 
         return result;
     }

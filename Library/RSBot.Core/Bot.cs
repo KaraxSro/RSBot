@@ -9,6 +9,7 @@ namespace RSBot.Core;
 public class Bot
 {
     private readonly object _startLock = new();
+    private Task _botTask;
 
     /// <summary>
     ///     Gets or sets a value indicating whether this <see cref="Bot" /> is running.
@@ -59,23 +60,41 @@ public class Bot
             Running = true;
         }
 
-        Task.Factory.StartNew(
-            async e =>
+        _botTask = Task.Run(
+            async () =>
             {
-                EventManager.FireEvent("OnStartBot");
-                Botbase.Start();
-
-                while (!tokenSource.IsCancellationRequested)
+                try
                 {
-                    if (!Game.Ready)
-                        continue;
+                    EventManager.FireEvent("OnStartBot");
+                    Botbase.Start();
 
-                    Botbase.Tick();
-                    await Task.Delay(100);
+                    while (!tokenSource.IsCancellationRequested)
+                    {
+                        if (Game.Ready)
+                        {
+                            var tickContext = new BotTickContext();
+                            EventManager.FireEvent("OnBeforeBotTick", tickContext);
+
+                            if (!tickContext.Cancel)
+                                Botbase.Tick();
+                        }
+
+                        // Always yield, including while the client is loading or disconnected.
+                        // The old continue above this delay caused a full-core busy loop.
+                        await Task.Delay(100, tokenSource.Token).ConfigureAwait(false);
+                    }
+                }
+                catch (System.OperationCanceledException) when (tokenSource.IsCancellationRequested)
+                {
+                    // Expected when the bot is stopped.
+                }
+                catch (System.Exception ex)
+                {
+                    Log.Fatal(ex);
+                    Running = false;
                 }
             },
-            tokenSource.Token,
-            TaskCreationOptions.LongRunning
+            tokenSource.Token
         );
     }
 

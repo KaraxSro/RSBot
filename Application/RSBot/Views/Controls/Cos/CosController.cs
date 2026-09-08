@@ -24,7 +24,6 @@ public partial class CosController : DoubleBufferedControl
         SetStyle(ControlStyles.AllPaintingInWmPaint, true);
         InitializeComponent();
 
-        CheckForIllegalCrossThreadCalls = false;
         Visible = false;
 
         _cachedControls = new Dictionary<string, CosControlBase>();

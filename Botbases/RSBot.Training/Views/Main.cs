@@ -446,7 +446,7 @@ public partial class Main : DoubleBufferedControl
     private void linkAttackWeakerMobsHelp_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
     {
         MessageBox.Show(
-            "If the player is under attack by a monster that is set to be avoided the bot will counter attack weaker mobs that are currently attacking the player first before targeting the avoided monster again. The bot will only kill weaker monsters that are attacking the player and won't start to pull new mobs to the battle.",
+            "When multiple monsters are attacking the player, the bot targets the weaker monster type first: General, Champion, Giant, Elite, Unique, then Titan. Party variants follow the same type order. Avoid and Prefer settings do not affect this counter-attack priority. The bot only considers monsters that are already attacking the player and won't pull new mobs into the battle.",
             "Attack weaker mobs first",
             MessageBoxButtons.OK,
             MessageBoxIcon.Question
