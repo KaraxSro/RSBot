@@ -550,38 +550,42 @@ public partial class Main : UIWindow
         if (_shutdownStarted)
             return;
 
-        var showExitDialog =
-            Kernel.Proxy != null
-            && Kernel.Proxy.ClientConnected
-            && GlobalConfig.Get("RSBot.showExitDialog", true);
-        if (showExitDialog)
-        {
-            using var exitDialog = new ExitDialog();
-            if (exitDialog.ShowDialog(this) != DialogResult.Yes)
-                return;
-        }
+        using var exitDialog = new ExitDialog();
+        if (exitDialog.ShowDialog(this) != DialogResult.Yes)
+            return;
+        var exitMode = exitDialog.ExitMode;
 
         _shutdownStarted = true;
         Enabled = false;
 
+        var shutdownSucceeded = false;
         try
         {
-            await ShutdownAsync();
+            await ShutdownAsync(exitMode);
+            shutdownSucceeded = true;
         }
         catch (Exception exception)
         {
             Log.Error($"Graceful shutdown failed: {exception.Message}");
-            Kernel.Proxy?.Shutdown();
-            ClientManager.Kill();
         }
         finally
         {
-            _shutdownCompleted = true;
-            Close();
+            if (shutdownSucceeded || !ClientManager.IsRunning)
+            {
+                _shutdownCompleted = true;
+                Close();
+            }
+            else
+            {
+                _shutdownStarted = false;
+                Enabled = true;
+                ClientManager.CancelIntentionalExit("RSBot shutdown was canceled because the client remained open");
+                Log.Warn("RSBot remains open because the game client could not be closed.");
+            }
         }
     }
 
-    private static async Task ShutdownAsync()
+    private static async Task ShutdownAsync(ExitDialog.ClientExitMode exitMode)
     {
         GlobalConfig.Save();
         PlayerConfig.Save();
@@ -598,23 +602,78 @@ public partial class Main : UIWindow
             }
         }
 
+        ClientManager.BeginIntentionalExit("RSBot main window is closing");
+
+        var clientExited = !ClientManager.IsRunning;
+
+        if (exitMode == ExitDialog.ClientExitMode.Forced)
+        {
+            Log.Warn("Forced shutdown selected; closing the game client immediately.");
+            Kernel.Proxy?.Shutdown();
+            ClientManager.Kill();
+            clientExited = await ClientManager.WaitForExitAsync(5_000);
+
+            if (!clientExited && ClientManager.IsRunning)
+                throw new InvalidOperationException("The game client is still running after the forced-close request.");
+
+            return;
+        }
+
+        var gracefulDeadline = DateTime.UtcNow.AddSeconds(7);
+
         if (Kernel.Proxy?.IsConnectedToAgentserver == true && Game.Player != null)
         {
             var logoutAcknowledgement = new AwaitCallback(null, 0xB005);
+            var logoutCompleted = new AwaitCallback(null, 0x300A);
             var logoutRequest = new Packet(0x7005);
             logoutRequest.WriteByte(1); // Exit game
 
             Log.Debug("Sending logout request before closing the client.");
-            PacketManager.SendPacket(logoutRequest, PacketDestination.Server, logoutAcknowledgement);
+            PacketManager.SendPacket(
+                logoutRequest,
+                PacketDestination.Server,
+                logoutAcknowledgement,
+                logoutCompleted
+            );
             await logoutAcknowledgement.AwaitResponseAsync(2_000);
 
             if (logoutAcknowledgement.IsTimedOut)
-                Log.Debug("Logout acknowledgement timed out; continuing with connection shutdown.");
+                Log.Warn("Logout acknowledgement timed out; continuing with the graceful close fallback.");
+            else
+                Log.Debug("Logout request acknowledged; waiting for logout completion.");
+
+            var remainingBeforeWindowClose = Math.Max(
+                1,
+                (int)(gracefulDeadline - DateTime.UtcNow).TotalMilliseconds - 1_000
+            );
+            var logoutTask = logoutCompleted.AwaitResponseAsync(remainingBeforeWindowClose);
+            var exitTask = ClientManager.WaitForExitAsync(remainingBeforeWindowClose);
+            await Task.WhenAny(logoutTask, exitTask);
+            clientExited = !ClientManager.IsRunning;
+
+            if (logoutCompleted.IsCompleted)
+                Log.Debug("Logout completed; requesting the client window to close normally.");
         }
 
+        if (!clientExited && ClientManager.IsRunning)
+        {
+            Log.Debug("Requesting a normal client window close.");
+            ClientManager.RequestClose();
+            var remainingMilliseconds = Math.Max(1, (int)(gracefulDeadline - DateTime.UtcNow).TotalMilliseconds);
+            clientExited = await ClientManager.WaitForExitAsync(remainingMilliseconds);
+        }
+
+        if (!clientExited && ClientManager.IsRunning)
+        {
+            Log.Warn("The game client did not exit within 7 seconds; forcing it to close.");
+            ClientManager.Kill();
+            clientExited = await ClientManager.WaitForExitAsync(5_000);
+        }
+
+        if (!clientExited && ClientManager.IsRunning)
+            throw new InvalidOperationException("The game client is still running after the forced-close fallback.");
+
         Kernel.Proxy?.Shutdown();
-        await Task.Delay(100);
-        ClientManager.Kill();
     }
 
     /// <summary>

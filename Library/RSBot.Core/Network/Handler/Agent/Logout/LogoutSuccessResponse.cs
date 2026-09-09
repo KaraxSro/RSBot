@@ -27,7 +27,11 @@ internal class LogoutSuccessResponse : IPacketHandler
     public void Invoke(Packet packet)
     {
         Log.Notify("The player has left the game!");
-        Kernel.Proxy?.Shutdown(); //Forced disconnect because LogoutMode of 0x7005 is not yet supported.
+        // During an RSBot-initiated exit the response has only just been queued for the
+        // game client. Keep the proxy alive so it can receive the logout completion and
+        // close normally; the main shutdown flow owns the timeout and forced fallback.
+        if (!global::RSBot.Core.Components.ClientManager.IsIntentionalExit)
+            Kernel.Proxy?.Shutdown();
         EventManager.FireEvent("OnLogout");
     }
 }

@@ -42,6 +42,9 @@ internal class EnhanceBundleConfig
     /// </summary>
     public bool UseLuckyStones { get; set; }
 
+    /// <summary>The first target plus level before which Lucky is applied.</summary>
+    public byte LuckyUseFromPlus { get; set; } = 6;
+
     /// <summary>
     ///     Gets or sets the selected enhancer elixir
     /// </summary>

@@ -35,7 +35,7 @@ internal class Deaths : IStatisticCalculator
 
     private void OnPlayerDead()
     {
-        if (Kernel.Bot.Running)
+        if (CalculatorRegistry.CollectionEnabled && Kernel.Bot.Running)
             _deathsCounter++;
     }
 }

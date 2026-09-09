@@ -43,6 +43,7 @@ internal class CharacterListing : IPacketHandler
         Log.StatusLang("WaitingUserForSelectCharacter");
 
         var charCount = packet.ReadByte();
+        AutoLogin.RecordState($"Character list received; count={charCount}", LogLevel.Notify);
 
         var lobbyCharacters = new (byte level, string name)[charCount];
 
@@ -114,7 +115,10 @@ internal class CharacterListing : IPacketHandler
         var username = GlobalConfig.Get<string>("RSBot.General.AutoLoginAccountUsername");
         var selectedAccount = Accounts.SavedAccounts?.Find(p => p.Username == username);
         if (selectedAccount == null)
+        {
+            AutoLogin.RecordState("Character selection stopped: configured account is missing", LogLevel.Warning);
             return;
+        }
 
         selectedAccount.Characters = lobbyCharacters.Select(p => p.name).ToList();
 
@@ -149,6 +153,7 @@ internal class CharacterListing : IPacketHandler
             else
             {
                 Log.StatusLang("SelectYourCharacterManually");
+                AutoLogin.RecordState("Waiting for manual character selection", LogLevel.Notify);
                 return;
             }
         }

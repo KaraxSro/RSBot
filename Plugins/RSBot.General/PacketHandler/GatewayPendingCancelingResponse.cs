@@ -30,6 +30,7 @@ internal class GatewayPendingCancelingResponse : IPacketHandler
     {
         if (packet.ReadByte() == 0x01)
         {
+            AutoLogin.RecordState("Gateway queue cancelled", RSBot.Core.LogLevel.Warning);
             AutoLogin.Pending = false;
             View.PendingWindow?.Hide();
             View.PendingWindow?.StopClientlessQueueTask();

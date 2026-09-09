@@ -32,6 +32,11 @@ public partial class Main : DoubleBufferedControl
     /// </summary>
     private void LoadSettings()
     {
+        checkEnableStatistics.Checked = PlayerConfig.Get(
+            "RSBot.Statistics.CollectionEnabled",
+            true
+        );
+
         foreach (var check in panelLiveFilters.Controls.OfType<CheckBox>())
             check.Checked = PlayerConfig.Get($"RSBot.Statistics.{check.Name}", true);
         foreach (var check in panelStaticFilters.Controls.OfType<CheckBox>())
@@ -131,7 +136,10 @@ public partial class Main : DoubleBufferedControl
             var calculator = (IStatisticCalculator)item?.Tag;
 
             if (calculator != null)
-                item.SubItems[1].Text = string.Format(calculator.ValueFormat, calculator.GetValue());
+                item.SubItems[1].Text = string.Format(
+                    calculator.ValueFormat,
+                    CalculatorRegistry.GetValue(calculator)
+                );
         }
     }
 
@@ -181,15 +189,29 @@ public partial class Main : DoubleBufferedControl
     /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
     private void btnReset_Click(object sender, EventArgs e)
     {
-        foreach (var calculator in CalculatorRegistry.Calculators)
-            calculator.Reset();
+        CalculatorRegistry.Reset();
+        UpdateStatistics();
     }
 
     private void resetToolStripMenuItem_Click(object sender, EventArgs e)
     {
         foreach (ListViewItem lvItem in lvStatistics.SelectedItems)
             if (lvItem.Tag is IStatisticCalculator calculator)
-                calculator.Reset();
+                CalculatorRegistry.Reset(calculator);
+
+        UpdateStatistics();
+    }
+
+    private void checkEnableStatistics_CheckedChanged(object sender, EventArgs e)
+    {
+        var enabled = checkEnableStatistics.Checked;
+        CalculatorRegistry.SetCollectionEnabled(enabled);
+        btnReset.Enabled = enabled;
+
+        if (!_initialReset)
+            PlayerConfig.Set("RSBot.Statistics.CollectionEnabled", enabled);
+
+        UpdateStatistics();
     }
 
     /// <summary>
@@ -207,10 +229,8 @@ public partial class Main : DoubleBufferedControl
 
         LoadSettings();
 
-        foreach (var calculator in CalculatorRegistry.Calculators)
-            calculator.Reset();
-
         PopulateStatisticsList();
+        UpdateStatistics();
         _initialReset = false;
     }
 }

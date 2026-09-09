@@ -24,9 +24,10 @@ internal class LootBundle : IBundle
             return;
 
         //If we use the ability pet, we can attack during the work of the Pickup manager
-        if (Config.UseAbilityPet && Game.Player.HasActiveAbilityPet && !PickupManager.RunningAbilityPetPickup)
+        if (PickupManager.UseAbilityPet && Game.Player.HasActiveAbilityPet)
         {
-            PickupManager.RunAbilityPet(Container.Bot.Area.Position, Container.Bot.Area.Radius);
+            if (!PickupManager.RunningAbilityPetPickup)
+                _ = PickupManager.RunAbilityPetAsync(Container.Bot.Area.Position, Container.Bot.Area.Radius);
             return;
         }
 

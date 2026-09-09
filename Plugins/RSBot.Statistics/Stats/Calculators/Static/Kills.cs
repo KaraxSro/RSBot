@@ -46,6 +46,7 @@ internal class Kills : IStatisticCalculator
 
     private void OnKillEnemy()
     {
-        _lastTickValue++;
+        if (CalculatorRegistry.CollectionEnabled)
+            _lastTickValue++;
     }
 }

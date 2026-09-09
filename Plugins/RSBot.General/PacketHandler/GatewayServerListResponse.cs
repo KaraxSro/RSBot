@@ -100,7 +100,7 @@ internal class GatewayServerListResponse : IPacketHandler
             Log.Notify($"Found server: {serverName} ({state})");
         }
 
-        AutoLogin.Handle();
+        AutoLogin.Handle("server list received");
     }
 
     private enum ServerStatusModern

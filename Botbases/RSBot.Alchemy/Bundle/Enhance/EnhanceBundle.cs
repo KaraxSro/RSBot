@@ -120,139 +120,61 @@ internal class EnhanceBundle : IAlchemyBundle
         }
 
         _config = config;
-        _luckyPowders = AlchemyItemHelper.GetLuckyPowders(config.Item);
-
-        //Bot should stop without lucky powder?
-        if (!_luckyPowders.Any() && config.StopIfLuckyPowderEmpty)
-        {
-            Log.Warn("[Alchemy] No lucky powder left, stopping alchemy now!");
-
-            Kernel.Bot.Stop();
-            MessageBox.Show(
-                "No more lucky powder left in the inventory.",
-                "Lucky powder",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information
-            );
-            return;
-        }
+        _config.Item = item;
+        _luckyPowders = AlchemyItemHelper.GetLuckyPowders(item);
+        var nextPlusValue = item.OptLevel + 1;
+        Log.Debug($"[Alchemy] Tick: slot={item.Slot}; itemId={item.ItemId}; current=+{item.OptLevel}; max=+{config.MaxOptLevel}; target=+{nextPlusValue}; config={config.GetHashCode():X}");
 
         //Max opt level reached?
-        if (config.Item.OptLevel >= config.MaxOptLevel)
+        if (item.OptLevel >= config.MaxOptLevel)
         {
-            Log.Warn($"[Alchemy] Item is already +{config.Item.OptLevel}");
+            Log.Warn($"[Alchemy] Reached max enhancement +{config.MaxOptLevel}; no +{nextPlusValue} request sent.");
 
             Globals.View.AddLog(
-                config.Item.Record.GetRealName(),
-                $"The item's option level is {config.Item.OptLevel}/{config.MaxOptLevel}"
+                item.Record.GetRealName(),
+                $"Alchemy stopped: target plus reached (+{item.OptLevel}, configured target +{config.MaxOptLevel})."
             );
             Kernel.Bot.Stop();
 
             return;
         }
 
-        //Use steady stone?
-        if (_config.UseSteadyStones && _config.Item.OptLevel >= 5)
+        // Fixed safety state machine. Required stones always precede optional Lucky.
+        if (nextPlusValue >= 5 && config.UseImmortalStones
+            && !EnsureRequiredStone(item, AlchemyItemHelper.GetImmortalStone(item), RefMagicOpt.MaterialImmortal, "Immortal", nextPlusValue))
+            return;
+        if (nextPlusValue >= 5 && config.UseAstralStones
+            && !AlchemyItemHelper.HasMagicOption(item, RefMagicOpt.MaterialImmortal))
         {
-            var steadyStone = AlchemyItemHelper.GetSteadyStone(config.Item);
-
-            if (
-                steadyStone != null
-                && steadyStone.Amount > 0
-                && !AlchemyItemHelper.HasMagicOption(config.Item, RefMagicOpt.MaterialSteady)
-            )
-            {
-                if (!AlchemyManager.TryFuseMagicStone(_config.Item, steadyStone))
-                    return;
-
-                _shouldRun = false;
-                _isStoneFusing = true;
-
-                return;
-            }
+            BlockEnhancement(
+                item,
+                $"Astral is enabled for +{nextPlusValue}, but the item has no matching Immortal option. Enable/use Immortal first"
+            );
+            return;
         }
+        if (nextPlusValue >= 5 && config.UseAstralStones
+            && !EnsureRequiredStone(item, AlchemyItemHelper.GetAstralStone(item), RefMagicOpt.MaterialAstral, "Astral", nextPlusValue))
+            return;
+        if (nextPlusValue >= 6 && config.UseSteadyStones
+            && !EnsureRequiredStone(item, AlchemyItemHelper.GetSteadyStone(item), RefMagicOpt.MaterialSteady, "Steady", nextPlusValue))
+            return;
 
-        //Use lucky stone?
-        if (_config.UseLuckyStones && _config.Item.OptLevel >= 5)
+        if (config.UseLuckyStones && nextPlusValue >= Math.Max(1, (int)config.LuckyUseFromPlus)
+            && !AlchemyItemHelper.HasMagicOption(item, RefMagicOpt.MaterialLuck))
         {
-            var luckyStone = AlchemyItemHelper.GetLuckyStone(config.Item);
-
-            if (
-                luckyStone != null
-                && luckyStone.Amount > 0
-                && !AlchemyItemHelper.HasMagicOption(config.Item, RefMagicOpt.MaterialLuck)
-            )
+            var luckyStone = AlchemyItemHelper.GetLuckyStone(item);
+            if (luckyStone?.Amount > 0)
             {
-                if (!AlchemyManager.TryFuseMagicStone(_config.Item, luckyStone))
-                    return;
-
-                _shouldRun = false;
-                _isStoneFusing = true;
-
-                return;
-            }
-        }
-
-        //Use immortal stone?
-        if (_config.UseImmortalStones && _config.Item.OptLevel >= 5)
-        {
-            var immortalStone = AlchemyItemHelper.GetImmortalStone(config.Item);
-
-            if (
-                immortalStone?.Amount > 0
-                && !AlchemyItemHelper.HasMagicOption(config.Item, RefMagicOpt.MaterialImmortal)
-            )
-            {
-                if (!AlchemyManager.TryFuseMagicStone(_config.Item, immortalStone))
-                    return;
-
-                _shouldRun = false;
-                _isStoneFusing = true;
-
-                return;
-            }
-        }
-
-        //Use astral stone?
-        if (_config.UseAstralStones && _config.Item.OptLevel >= 5)
-        {
-            var astralStone = AlchemyItemHelper.GetAstralStone(config.Item);
-
-            if (
-                astralStone != null
-                && astralStone.Amount > 0
-                && !AlchemyItemHelper.HasMagicOption(config.Item, RefMagicOpt.MaterialAstral)
-            )
-            {
-                //Is immortal high enough?
-                var magicOption = Game.ReferenceManager.GetMagicOption(
-                    RefMagicOpt.MaterialImmortal,
-                    (byte)config.Item.Record.Degree
-                );
-
-                //Can not fuse if immortal is not available (or not high enough)
-                var magicOptionInfo = config.Item.MagicOptions?.FirstOrDefault(m => m.Id == magicOption.Id);
-                if (magicOptionInfo == null)
+                if (AlchemyManager.TryFuseMagicStone(item, luckyStone))
                 {
-                    Log.Notify(
-                        $"[Alchemy] Could not fuse {astralStone.Record.GetRealName()} because the immortality option is not high enough"
-                    );
-
-                    _config.UseAstralStones = false;
-                    return;
+                    _shouldRun = false;
+                    _isStoneFusing = true;
                 }
-
-                if (!AlchemyManager.TryFuseMagicStone(_config.Item, astralStone))
-                    return;
-
-                _shouldRun = false;
-                _isStoneFusing = true;
-
                 return;
             }
-        }
 
-        var nextPlusValue = config.Item.OptLevel + 1;
+            Log.Warn($"[Alchemy] Lucky is enabled from +{config.LuckyUseFromPlus}, but no D{item.Record.Degree} Lucky stone is available; continuing because Lucky is optional.");
+        }
 
         Log.Notify($"[Alchemy] Attempting +{nextPlusValue}...");
 
@@ -269,10 +191,70 @@ internal class EnhanceBundle : IAlchemyBundle
         if (_config == null || !_shouldRun || !_config.Elixirs.Any())
             return;
 
+        var refreshedItem = Game.Player.Inventory.GetItemAt(_config.Item.Slot);
+        if (refreshedItem == null)
+            return;
+        _config.Item = refreshedItem;
+        if (refreshedItem.OptLevel >= _config.MaxOptLevel)
+        {
+            Log.Warn($"[Alchemy] Reached max enhancement +{_config.MaxOptLevel}; no +{refreshedItem.OptLevel + 1} request sent.");
+            _shouldRun = false;
+            Kernel.Bot.Stop();
+            return;
+        }
+
+        //Bot should stop without lucky powder?
+        if (!_luckyPowders.Any() && _config.StopIfLuckyPowderEmpty)
+        {
+            Log.Warn("[Alchemy] No lucky powder left; no enhancement packet sent.");
+
+            Kernel.Bot.Stop();
+            MessageBox.Show(
+                "No more lucky powder left in the inventory.",
+                "Lucky powder",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+            return;
+        }
+
         var powder = _luckyPowders.FirstOrDefault();
         var elixir = Game.Player.Inventory.GetItem(_config.Elixirs.First().ItemId);
+        if (elixir == null)
+        {
+            Log.Warn("[Alchemy] Selected elixir is no longer available; no packet sent.");
+            return;
+        }
+        AlchemyManager.TryFuseElixir(refreshedItem, elixir, powder);
+    }
 
-        AlchemyManager.TryFuseElixir(_config.Item, elixir, powder);
+    private bool EnsureRequiredStone(InventoryItem item, InventoryItem stone, string option, string name, int targetPlus)
+    {
+        if (AlchemyItemHelper.HasMagicOption(item, option))
+            return true;
+
+        if (stone?.Amount > 0)
+        {
+            Log.Notify($"[Alchemy] Preparing required {name} protection before +{targetPlus}.");
+            if (AlchemyManager.TryFuseMagicStone(item, stone))
+            {
+                _shouldRun = false;
+                _isStoneFusing = true;
+            }
+            return false;
+        }
+
+        BlockEnhancement(item, $"{name} is enabled and required before +{targetPlus}, but no matching D{item.Record.Degree} stone is available");
+        return false;
+    }
+
+    private void BlockEnhancement(InventoryItem item, string detail)
+    {
+        var reason = $"[Alchemy] Blocked at +{item.OptLevel}: {detail}; no enhancement packet sent.";
+        Log.Warn(reason);
+        Globals.View.AddLog(item.Record.GetRealName(), reason);
+        _shouldRun = false;
+        Kernel.Bot.Stop();
     }
 
     #endregion Methods
@@ -296,7 +278,13 @@ internal class EnhanceBundle : IAlchemyBundle
         if (Globals.Botbase.AlchemyEngine != AlchemyEngine.Enhance)
             return;
 
-        //After fusing a magic stone (steady, astral & co.) tell the bot to continue to fuse elixirs!
+        if (_config != null && newItem != null)
+        {
+            _config.Item = newItem;
+            Log.Debug($"[Alchemy] Refreshed item after success: slot={newItem.Slot}; opt=+{newItem.OptLevel}; durability={newItem.Durability}");
+        }
+
+        //After fusing a magic stone, reevaluate all requirements from the refreshed item.
         if (Bootstrap.IsActive && _isStoneFusing)
         {
             _shouldRun = true;
@@ -312,9 +300,6 @@ internal class EnhanceBundle : IAlchemyBundle
 
         Log.Notify(message);
         Globals.View.AddLog(newItem.Record.GetRealName(), message);
-
-        if (_config != null)
-            _config.Item = newItem;
 
         _shouldRun = true;
     }
@@ -336,6 +321,13 @@ internal class EnhanceBundle : IAlchemyBundle
     /// <param name="type">The type of alchemy that was triggered</param>
     private void OnElixirAlchemyFailed(InventoryItem oldItem, InventoryItem newItem, AlchemyType type)
     {
+        if (_config != null && newItem != null)
+            _config.Item = newItem;
+        if (_isStoneFusing)
+        {
+            _isStoneFusing = false;
+            _shouldRun = true;
+        }
         if (type != AlchemyType.Elixir)
             return;
 
@@ -368,8 +360,7 @@ internal class EnhanceBundle : IAlchemyBundle
             Globals.View.AddLog(newItem.Record.GetRealName(), message);
         }
 
-        if (_config != null)
-            _config.Item = newItem;
+        Log.Debug($"[Alchemy] Refreshed item after failure: slot={newItem.Slot}; opt=+{newItem.OptLevel}; durability={newItem.Durability}");
     }
 
     /// <summary>

@@ -131,16 +131,20 @@ public class Proxy
     /// </summary>
     private void CreateNewServerInstance()
     {
-        if (Server != null && Server.IsConnected)
-            Server.Disconnect();
-
+        var previousServer = Server;
         IsConnectedToGatewayserver = false;
         IsConnectedToAgentserver = false;
 
-        Server = new Server();
-        Server.Connected += Server_OnConnected;
-        Server.Disconnected += Server_OnDisconnected;
-        Server.PacketReceived += Server_OnPacketReceived;
+        var currentServer = new Server();
+        Server = currentServer;
+        currentServer.Connected += () => Server_OnConnected(currentServer);
+        currentServer.Disconnected += () => Server_OnDisconnected(currentServer);
+        currentServer.PacketReceived += packet => Server_OnPacketReceived(currentServer, packet);
+
+        // Make the replacement current before disconnecting the old socket. Any callback
+        // already in flight from the old gateway will then fail the identity check below.
+        if (previousServer?.IsConnected == true)
+            previousServer.Disconnect();
     }
 
     /// <summary>
@@ -249,8 +253,14 @@ public class Proxy
     ///     Fired when a server packet was received
     /// </summary>
     /// <param name="packet">The packet.</param>
-    private void Server_OnPacketReceived(Packet packet)
+    private void Server_OnPacketReceived(Server source, Packet packet)
     {
+        if (!ReferenceEquals(source, Server))
+        {
+            Log.Debug("Ignoring a packet from a retired server connection.");
+            return;
+        }
+
         HandleReceivedPacket(packet, PacketDestination.Client);
 
         EventManager.FireEvent("OnServerPacketReceive", packet);
@@ -272,8 +282,14 @@ public class Proxy
     /// <summary>
     ///     Fired when the server disconnected
     /// </summary>
-    private void Server_OnDisconnected()
+    private void Server_OnDisconnected(Server source)
     {
+        if (!ReferenceEquals(source, Server))
+        {
+            Log.Debug("Ignoring a disconnect event from a retired server connection.");
+            return;
+        }
+
         if (IsConnectedToAgentserver)
         {
             Log.Warn("Disconnected from game server!");
@@ -298,8 +314,14 @@ public class Proxy
     /// <summary>
     ///     Fired when the server conntected
     /// </summary>
-    private void Server_OnConnected()
+    private void Server_OnConnected(Server source)
     {
+        if (!ReferenceEquals(source, Server))
+        {
+            Log.Debug("Ignoring a connected event from a retired server connection.");
+            return;
+        }
+
         if (IsConnectedToGatewayserver)
             EventManager.FireEvent("OnGatewayServerConntected");
         else if (IsConnectedToAgentserver)

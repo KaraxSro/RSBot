@@ -53,12 +53,18 @@ public class Bootstrap : IPlugin
     /// <inheritdoc />
     public void OnLoadCharacter()
     {
-        // do nothing
+        CalculatorRegistry.SetCollectionEnabled(
+            PlayerConfig.Get("RSBot.Statistics.CollectionEnabled", true)
+        );
     }
 
     /// <inheritdoc />
     public void Enable()
     {
+        CalculatorRegistry.SetCollectionEnabled(
+            PlayerConfig.Get("RSBot.Statistics.CollectionEnabled", true)
+        );
+
         if (View != null)
             View.Enabled = true;
     }
@@ -66,6 +72,8 @@ public class Bootstrap : IPlugin
     /// <inheritdoc />
     public void Disable()
     {
+        CalculatorRegistry.SetCollectionEnabled(false);
+
         if (View != null)
             View.Enabled = false;
     }

@@ -15,6 +15,10 @@ public static class NativeExtensions
     public const uint MEM_RELEASE = 0x00008000;
     public const uint PAGE_READWRITE = 0x04;
     public const uint PAGE_EXECUTE_READWRITE = 0x40;
+    public const uint WAIT_OBJECT_0 = 0x00000000;
+    public const uint WAIT_ABANDONED = 0x00000080;
+    public const uint WAIT_TIMEOUT = 0x00000102;
+    public const uint WAIT_FAILED = 0xFFFFFFFF;
 
     public const uint SW_HIDE = 0x00;
     public const uint SW_SHOW = 0x05;
@@ -25,7 +29,7 @@ public static class NativeExtensions
     [DllImport("user32.dll")]
     public static extern int SetWindowText(IntPtr hWnd, string text);
 
-    [DllImport("kernel32.dll")]
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern bool CreateProcess /*A*/
     (
         string lpApplicationName,
@@ -52,7 +56,7 @@ public static class NativeExtensions
         out IntPtr lpNumberOfBytesRead
     );
 
-    [DllImport("kernel32.dll")]
+    [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool WriteProcessMemory(
         IntPtr hProcess,
         IntPtr lpBaseAddress,
@@ -76,7 +80,7 @@ public static class NativeExtensions
     [DllImport("kernel32.dll")]
     public static extern bool CloseHandle(IntPtr handle);
 
-    [DllImport("kernel32.dll")]
+    [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr CreateRemoteThread(
         IntPtr hProcess,
         IntPtr lpThreadAttributes,
@@ -90,10 +94,10 @@ public static class NativeExtensions
     [DllImport("kernel32.dll")]
     public static extern IntPtr OpenThread(uint dwDesiredAccess, bool bInheritHandle, uint dwThreadId);
 
-    [DllImport("kernel32.dll")]
+    [DllImport("kernel32.dll", SetLastError = true)]
     public static extern uint ResumeThread(IntPtr hThread);
 
-    [DllImport("kernel32.dll")]
+    [DllImport("kernel32.dll", SetLastError = true)]
     public static extern uint SuspendThread(IntPtr hThread);
 
     [DllImport("kernel32.dll", SetLastError = true)]

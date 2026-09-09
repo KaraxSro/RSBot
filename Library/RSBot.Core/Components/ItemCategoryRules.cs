@@ -183,8 +183,10 @@ public static class ItemCategoryRules
         lock (SyncRoot)
         {
             var rareKey = GetRareRuleKey(item);
-            if (rareKey != null && _storeRareRules.Contains(rareKey))
-                return true;
+            // A recognized rare item is terminally classified here. It must never
+            // inherit normal equipment degree/type/gender storage rules.
+            if (rareKey != null)
+                return _storeRareRules.Contains(rareKey);
 
             var equipmentKey = GetEquipmentKey(item);
             if (

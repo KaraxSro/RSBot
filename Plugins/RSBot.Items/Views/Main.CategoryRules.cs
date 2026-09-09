@@ -28,6 +28,8 @@ public partial class Main
     private ComboBox _itemTestCodeName;
     private ItemRuleTestOption _selectedItemTestOption;
     private WinLabel _itemTestResult;
+    private Timer _itemTestDebounceTimer;
+    private string[] _visibleItemTestSuggestions = Array.Empty<string>();
     private bool _updatingItemTestOptions;
     private bool _loadingCategoryRules;
 
@@ -207,7 +209,6 @@ public partial class Main
 
         _itemTestCodeName = new ComboBox
         {
-            Cursor = Cursors.Default,
             Dock = DockStyle.Fill,
             DropDownHeight = 360,
             DropDownStyle = ComboBoxStyle.DropDown,
@@ -215,21 +216,37 @@ public partial class Main
             Margin = new Padding(3, 5, 6, 5),
             MaxDropDownItems = 16,
         };
+        _itemTestDebounceTimer = new Timer { Interval = 250 };
+        _itemTestDebounceTimer.Tick += (_, _) =>
+        {
+            _itemTestDebounceTimer.Stop();
+            UpdateItemRuleSuggestions(openDropDown: true);
+        };
+        _itemTestCodeName.Disposed += (_, _) =>
+        {
+            _itemTestDebounceTimer?.Stop();
+            _itemTestDebounceTimer?.Dispose();
+            _itemTestDebounceTimer = null;
+        };
         _itemTestCodeName.DropDown += (_, _) => UpdateItemRuleSuggestions(openDropDown: false);
         _itemTestCodeName.TextUpdate += (_, _) =>
         {
+            if (_updatingItemTestOptions)
+                return;
             _selectedItemTestOption = null;
-            if (string.IsNullOrWhiteSpace(_itemTestCodeName.Text) && _itemTestResult != null)
+            if (_itemTestResult != null)
             {
                 _itemTestResult.ForeColor = Color.DimGray;
                 _itemTestResult.Text = string.Empty;
             }
 
-            UpdateItemRuleSuggestions(openDropDown: true);
+            _itemTestDebounceTimer.Stop();
+            _itemTestDebounceTimer.Start();
         };
         _itemTestCodeName.SelectionChangeCommitted += (_, _) =>
         {
             _selectedItemTestOption = _itemTestCodeName.SelectedItem as ItemRuleTestOption;
+            TestItemRules();
         };
         _itemTestCodeName.SizeChanged += (_, _) =>
             _itemTestCodeName.DropDownWidth = Math.Max(_itemTestCodeName.Width, 650);
@@ -270,13 +287,10 @@ public partial class Main
         var query = _itemTestCodeName.Text.Trim();
         var selected = _itemTestCodeName.SelectedItem as ItemRuleTestOption;
         var rememberedSelection = _selectedItemTestOption;
+        var exactMatches = _itemTestOptions.Where(option => option.Matches(query)).ToArray();
         var item = selected?.Item
             ?? (rememberedSelection?.Matches(query) == true ? rememberedSelection.Item : null)
-            ?? _itemTestOptions
-            .FirstOrDefault(option =>
-                option.Matches(query)
-            )
-            ?.Item;
+            ?? (exactMatches.Length == 1 ? exactMatches[0].Item : null);
         if (item == null)
         {
             if (string.IsNullOrEmpty(query))
@@ -287,7 +301,9 @@ public partial class Main
             }
 
             _itemTestResult.ForeColor = Color.Firebrick;
-            _itemTestResult.Text = "Select a matching item from the list";
+            _itemTestResult.Text = exactMatches.Length > 1
+                ? "Multiple items have this name; select the exact codename from the list"
+                : "Select a matching item from the list";
             return;
         }
 
@@ -317,6 +333,7 @@ public partial class Main
                 .OrderBy(option => option.DisplayName)
                 .ThenBy(option => option.CodeName)
         );
+        _visibleItemTestSuggestions = Array.Empty<string>();
         UpdateItemRuleSuggestions(openDropDown: false);
     }
 
@@ -327,32 +344,35 @@ public partial class Main
 
         var enteredText = _itemTestCodeName.Text;
         var query = enteredText.Trim();
-        var matches = _itemTestOptions
+        var typedSelectionStart = _itemTestCodeName.SelectionStart;
+        var typedSelectionLength = _itemTestCodeName.SelectionLength;
+        var matchingOptions = _itemTestOptions
             .Where(option =>
                 string.IsNullOrEmpty(query)
                 || option.CodeName.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || option.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
             )
             .Take(250)
-            .Cast<object>()
             .ToArray();
-        var reopenDropDown = openDropDown && _itemTestCodeName.Focused && matches.Length > 0;
+        var suggestionKeys = matchingOptions.Select(option => option.CodeName).ToArray();
+        if (_visibleItemTestSuggestions.SequenceEqual(suggestionKeys, StringComparer.Ordinal))
+            return;
+        var matches = matchingOptions.Cast<object>().ToArray();
 
         _updatingItemTestOptions = true;
         try
         {
-            if (_itemTestCodeName.DroppedDown)
-                _itemTestCodeName.DroppedDown = false;
             _itemTestCodeName.BeginUpdate();
             _itemTestCodeName.Items.Clear();
             _itemTestCodeName.Items.AddRange(matches);
             _itemTestCodeName.SelectedIndex = -1;
             _itemTestCodeName.Text = enteredText;
-            _itemTestCodeName.SelectionStart = enteredText.Length;
-            _itemTestCodeName.SelectionLength = 0;
+            _itemTestCodeName.SelectionStart = Math.Min(typedSelectionStart, enteredText.Length);
+            _itemTestCodeName.SelectionLength = Math.Min(typedSelectionLength, enteredText.Length - _itemTestCodeName.SelectionStart);
             _itemTestCodeName.EndUpdate();
+            _visibleItemTestSuggestions = suggestionKeys;
             _itemTestCodeName.DropDownHeight = 360;
-            if (reopenDropDown)
+            if (openDropDown && _itemTestCodeName.Focused && matches.Length > 0 && !_itemTestCodeName.DroppedDown)
                 _itemTestCodeName.DroppedDown = true;
         }
         finally
@@ -367,15 +387,19 @@ public partial class Main
         {
             ColumnCount = 1,
             Dock = DockStyle.Top,
-            Height = 620,
+            Height = 660,
             Padding = new Padding(8),
-            RowCount = 2,
+            RowCount = 3,
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        layout.Controls.Add(CreateRareRuleSelector("Pickup", _pickupRareRuleChecks), 0, 0);
-        layout.Controls.Add(CreateRareRuleSelector("Store", _storeRareRuleChecks), 0, 1);
+        var explanation = CreateGridLabel("Rare equipment is controlled exclusively by this tab.", ContentAlignment.MiddleLeft);
+        explanation.ForeColor = Color.FromArgb(45, 100, 190);
+        layout.Controls.Add(explanation, 0, 0);
+        layout.Controls.Add(CreateRareRuleSelector("Pickup", _pickupRareRuleChecks), 0, 1);
+        layout.Controls.Add(CreateRareRuleSelector("Store", _storeRareRuleChecks), 0, 2);
         rareTab.Controls.Add(layout);
     }
 
@@ -477,7 +501,7 @@ public partial class Main
         var explanation = CreateGridLabel(
             "Choose which equipment to store.\r\n"
             + "With only Degrees selected, every equipment item of those degrees is stored.\r\n"
-            + "Selecting types narrows this to those types; Male/Female further narrows clothes. Rare-item settings are applied separately.",
+            + "Selecting types narrows this to those types; Male/Female further narrows clothes. These rules apply only to normal equipment; rare equipment is controlled exclusively by the Rare items tab.",
             ContentAlignment.MiddleLeft
         );
         explanation.AutoEllipsis = false;
@@ -1061,6 +1085,13 @@ public partial class Main
             _checkStoreMale.Checked,
             _checkStoreFemale.Checked
         );
+        RefreshSelectedItemRuleTestResult();
+    }
+
+    private void RefreshSelectedItemRuleTestResult()
+    {
+        if (_selectedItemTestOption != null && _selectedItemTestOption.Matches(_itemTestCodeName.Text.Trim()))
+            TestItemRules();
     }
 
     private void RefreshSupplyRulesUi()

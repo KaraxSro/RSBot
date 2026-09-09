@@ -40,7 +40,7 @@ internal class AttributeBundleConfig
     /// <value>
     ///     The item.
     /// </value>
-    public InventoryItem Item { get; init; }
+    public InventoryItem Item { get; set; }
 
     /// <summary>
     ///     Gets or sets the attributes.

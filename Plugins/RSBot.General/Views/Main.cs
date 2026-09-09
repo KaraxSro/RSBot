@@ -208,16 +208,18 @@ internal partial class Main : DoubleBufferedControl
     /// <summary>
     /// Starts the client process.
     /// </summary>
-    private async Task StartClientProcess()
+    private async Task StartClientProcess(string reason = "manual")
     {
         btnStartClient.Enabled = false;
         Game.Start();
 
-        var startedResult = await Task.Run(ClientManager.Start);
+        Log.Notify($"Start Client requested; reason={reason}; session={Log.SessionId}; log={Log.CurrentFilePath}");
+        var startedResult = await Task.Run(() => ClientManager.Start(reason));
         if (!startedResult)
         {
             OnExitClient();
             Log.WarnLang("ClientStartingError");
+            Log.Warn($"Client start failed. Launch ID: {ClientManager.CurrentLaunchId}; diagnostic log: {Log.CurrentFilePath}");
         }
     }
 
@@ -324,6 +326,12 @@ internal partial class Main : DoubleBufferedControl
     {
         Kernel.Bot.Stop();
 
+        if (ClientManager.IsIntentionalExit)
+        {
+            Log.Debug("Skipping client termination and autologin because shutdown is intentional.");
+            return;
+        }
+
         var userAuthenticated = await HandleRegionalAuth();
 
         // Skiped: Cuz managing from ClientlessManager
@@ -349,7 +357,7 @@ internal partial class Main : DoubleBufferedControl
             await Task.Delay(delay);
 
             if (userAuthenticated)
-                await StartClientProcess();
+                await StartClientProcess("automatic reconnect");
 
             return;
         }
@@ -364,6 +372,7 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private void OnClientConnected()
     {
+        ClientManager.MarkProxyConnected();
         btnStartClientless.Enabled = false;
     }
 

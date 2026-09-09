@@ -59,6 +59,7 @@ public partial class PendingWindow : UIWindowBase
         var end = packet.ReadUShort();
         var timestamp = packet.ReadInt();
         var begin = packet.ReadUShort();
+        AutoLogin.RecordState($"Queue progress: {begin}/{end}");
 
         Log.StatusLang("PendingQueue", Serverlist.Joining?.Name, begin, end);
         labelPending.Text = $"{begin} / {end}";
@@ -86,6 +87,7 @@ public partial class PendingWindow : UIWindowBase
         //this.Invoke(() =>
         //{
             AutoLogin.Pending = true;
+            AutoLogin.RecordState($"Queue started: position={count}; estimatedWaitMs={timestamp}", LogLevel.Notify);
             _startedTick = Kernel.TickCount;
 
             Log.StatusLang("PendingQueue", Serverlist.Joining?.Name, count, count);

@@ -1,4 +1,5 @@
 #include <Windows.h>
+#include <DbgHelp.h>
 #include <stdio.h>
 #include <string>
 #include <vector>
@@ -24,6 +25,145 @@ bool g_Activated = false;
 
 vector<string> g_RealGatewayAddresses;
 WORD g_RealGatewayPort = 15779;
+string g_SessionId;
+string g_LaunchId;
+string g_LogPath;
+LPTOP_LEVEL_EXCEPTION_FILTER g_PreviousExceptionFilter = NULL;
+
+void NativeLog(const string& stage, const string& message)
+{
+	if (g_LogPath.empty()) return;
+	try
+	{
+		SYSTEMTIME now;
+		GetLocalTime(&now);
+		ofstream stream(g_LogPath, ios::out | ios::app);
+		if (!stream.is_open()) return;
+		stream << "[" << now.wYear << "-";
+		stream.width(2); stream.fill('0'); stream << now.wMonth << "-";
+		stream.width(2); stream << now.wDay << " ";
+		stream.width(2); stream << now.wHour << ":";
+		stream.width(2); stream << now.wMinute << ":";
+		stream.width(2); stream << now.wSecond << ".";
+		stream.width(3); stream << now.wMilliseconds << "] [Native] [PID:" << GetCurrentProcessId()
+			<< "] [Session:" << g_SessionId << "] [ClientLaunch:" << g_LaunchId << "] [" << stage << "] " << message << endl;
+	}
+	catch (...) { }
+}
+
+string GetCrashDumpPath()
+{
+	string directory = ".";
+	size_t separator = g_LogPath.find_last_of("\\/");
+	if (separator != string::npos)
+		directory = g_LogPath.substr(0, separator);
+	directory += "\\CrashDumps";
+	CreateDirectoryA(directory.c_str(), NULL);
+
+	SYSTEMTIME now;
+	GetLocalTime(&now);
+	char fileName[MAX_PATH] = { 0 };
+	_snprintf_s(
+		fileName,
+		_countof(fileName),
+		_TRUNCATE,
+		"%s\\sro_client_%s_%lu_%04u%02u%02u_%02u%02u%02u.dmp",
+		directory.c_str(),
+		g_LaunchId.empty() ? "unknown" : g_LaunchId.c_str(),
+		GetCurrentProcessId(),
+		now.wYear,
+		now.wMonth,
+		now.wDay,
+		now.wHour,
+		now.wMinute,
+		now.wSecond
+	);
+	return fileName;
+}
+
+LONG WINAPI ClientUnhandledExceptionFilter(EXCEPTION_POINTERS* exceptionPointers)
+{
+	DWORD exceptionCode = exceptionPointers && exceptionPointers->ExceptionRecord
+		? exceptionPointers->ExceptionRecord->ExceptionCode
+		: 0;
+	void* exceptionAddress = exceptionPointers && exceptionPointers->ExceptionRecord
+		? exceptionPointers->ExceptionRecord->ExceptionAddress
+		: NULL;
+
+	stringstream details;
+	details << "Unhandled exception; code=0x" << hex << exceptionCode
+		<< "; address=" << exceptionAddress
+		<< "; thread=" << dec << GetCurrentThreadId();
+	NativeLog("crash", details.str());
+
+	string dumpPath = GetCrashDumpPath();
+	bool dumpWritten = false;
+	DWORD dumpError = ERROR_SUCCESS;
+	HMODULE dbgHelp = LoadLibraryA("dbghelp.dll");
+	if (dbgHelp)
+	{
+		auto miniDumpWriteDump = reinterpret_cast<decltype(&MiniDumpWriteDump)>(
+			GetProcAddress(dbgHelp, "MiniDumpWriteDump")
+		);
+		if (miniDumpWriteDump)
+		{
+			HANDLE dumpFile = CreateFileA(
+				dumpPath.c_str(),
+				GENERIC_WRITE,
+				FILE_SHARE_READ,
+				NULL,
+				CREATE_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				NULL
+			);
+			if (dumpFile != INVALID_HANDLE_VALUE)
+			{
+				MINIDUMP_EXCEPTION_INFORMATION exceptionInformation = {
+					GetCurrentThreadId(),
+					exceptionPointers,
+					FALSE
+				};
+				dumpWritten = miniDumpWriteDump(
+					GetCurrentProcess(),
+					GetCurrentProcessId(),
+					dumpFile,
+					static_cast<MINIDUMP_TYPE>(MiniDumpNormal | MiniDumpWithThreadInfo),
+					exceptionPointers ? &exceptionInformation : NULL,
+					NULL,
+					NULL
+				) == TRUE;
+				if (!dumpWritten)
+					dumpError = GetLastError();
+				CloseHandle(dumpFile);
+			}
+			else
+			{
+				dumpError = GetLastError();
+			}
+		}
+		else
+		{
+			dumpError = GetLastError();
+		}
+		FreeLibrary(dbgHelp);
+	}
+	else
+	{
+		dumpError = GetLastError();
+	}
+
+	NativeLog(
+		"crash",
+		dumpWritten
+			? string("Minidump written: ") + dumpPath
+			: string("Minidump failed; win32=") + to_string(dumpError)
+	);
+
+	if (g_PreviousExceptionFilter && g_PreviousExceptionFilter != ClientUnhandledExceptionFilter)
+		return g_PreviousExceptionFilter(exceptionPointers);
+
+	return EXCEPTION_CONTINUE_SEARCH;
+}
 
 std::vector<std::string> TokenizeString(const std::string& str, const std::string& delim)
 {
@@ -220,26 +360,32 @@ int WINAPI Detour_connect(SOCKET s, const struct sockaddr* name, int len)
 
 void Install()
 {
+	NativeLog("install", "BEGIN hook installation");
 	CreateMutexA(0, FALSE, "Silkroad Online Launcher");
 	CreateMutexA(0, FALSE, "Ready");
 
 	WSADATA wsaData = { 0 };
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
+	int wsaResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	NativeLog("winsock", string("WSAStartup result=") + to_string(wsaResult));
 
-	DetourRestoreAfterWith();
-	DetourTransactionBegin();
-	DetourUpdateThread(GetCurrentThread());
+	BOOL restoreResult = DetourRestoreAfterWith();
+	LONG beginResult = DetourTransactionBegin();
+	LONG updateResult = DetourUpdateThread(GetCurrentThread());
+	NativeLog("detours", string("restore=") + to_string(restoreResult) + "; begin=" + to_string(beginResult) + "; updateThread=" + to_string(updateResult));
 
 	//Multiclient
-	DetourAttach(&(PVOID&)Real_CreateMutexA, User_CreateMutexA);
-	DetourAttach(&(PVOID&)Real_bind, User_bind);
-	DetourAttach(&(PVOID&)Real_GetAdaptersInfo, User_GetAdaptersInfo);
-	DetourAttach(&(PVOID&)Real_CreateSemaphoreA, User_CreateSemaphoreA);
-	DetourAttach(&(PVOID&)Real_CreateSemaphoreW, User_CreateSemaphoreW);
-	DetourAttach(&(PVOID&)Real_connect, Detour_connect);
+	LONG attachMutex = DetourAttach(&(PVOID&)Real_CreateMutexA, User_CreateMutexA);
+	LONG attachBind = DetourAttach(&(PVOID&)Real_bind, User_bind);
+	LONG attachAdapters = DetourAttach(&(PVOID&)Real_GetAdaptersInfo, User_GetAdaptersInfo);
+	LONG attachSemaphoreA = DetourAttach(&(PVOID&)Real_CreateSemaphoreA, User_CreateSemaphoreA);
+	LONG attachSemaphoreW = DetourAttach(&(PVOID&)Real_CreateSemaphoreW, User_CreateSemaphoreW);
+	LONG attachConnect = DetourAttach(&(PVOID&)Real_connect, Detour_connect);
+	NativeLog("detours", string("attach results: mutex=") + to_string(attachMutex) + "; bind=" + to_string(attachBind) + "; adapters=" + to_string(attachAdapters) + "; semaphoreA=" + to_string(attachSemaphoreA) + "; semaphoreW=" + to_string(attachSemaphoreW) + "; connect=" + to_string(attachConnect));
 
-	DetourTransactionCommit();
+	LONG commitResult = DetourTransactionCommit();
+	NativeLog("detours", string("commit=") + to_string(commitResult));
 	WSACleanup();
+	NativeLog("install", commitResult == NO_ERROR ? "END success" : "END failed");
 }
 
 void Uninstall()
@@ -283,9 +429,14 @@ void LoadConfig()
 				g_RealGatewayAddresses.push_back(address);
 			}
 			PayloadRead(stream, g_RealGatewayPort);
+			PayloadReadString(stream, g_SessionId);
+			PayloadReadString(stream, g_LaunchId);
+			PayloadReadString(stream, g_LogPath);
 
 			stream.close();
+			NativeLog("config", string("Configuration parsed; gatewayCount=") + to_string(nRealGatewayAddressCount));
 			DeleteFileA(payloadPath.str().c_str());
+			NativeLog("config", "Temporary configuration deleted");
 			return;
 		}
 		Sleep(100);
@@ -298,6 +449,9 @@ DWORD WINAPI Initialize(LPVOID lpParam) {
 	if (!g_Activated) {
 		return 0;
 	}
+	NativeLog("initialize", "DLL attached; initialization worker started");
+	g_PreviousExceptionFilter = SetUnhandledExceptionFilter(ClientUnhandledExceptionFilter);
+	NativeLog("initialize", "Unhandled exception filter installed");
 
 	if (g_IsDebug) {
 		AllocConsole();
@@ -305,12 +459,15 @@ DWORD WINAPI Initialize(LPVOID lpParam) {
 	}
 
 	Install();
+	NativeLog("initialize", "Initialization worker completed");
 	return 0;
 }
 
 extern "C" _declspec(dllexport) BOOL APIENTRY DllMain(HMODULE hModule, DWORD ulReason, LPVOID lpReserved)
 {
 	if (ulReason == DLL_PROCESS_ATTACH) {
+		g_Instance = hModule;
+		DisableThreadLibraryCalls(hModule);
 		CloseHandle(CreateThread(NULL, 0, Initialize, NULL, 0, NULL));
 	}
 	return TRUE;

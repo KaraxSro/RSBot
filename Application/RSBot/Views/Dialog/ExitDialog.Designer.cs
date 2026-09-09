@@ -32,7 +32,8 @@
             panel1 = new SDUI.Controls.Panel();
             btnNo = new SDUI.Controls.Button();
             btnYes = new SDUI.Controls.Button();
-            checkDontAskAgain = new SDUI.Controls.CheckBox();
+            radioGraceful = new System.Windows.Forms.RadioButton();
+            radioForced = new System.Windows.Forms.RadioButton();
             pictureBox1 = new System.Windows.Forms.PictureBox();
             panel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
@@ -49,11 +50,11 @@
     System.Drawing.Color.Black
     };
             labelInfo.GradientAnimation = false;
-            labelInfo.Location = new System.Drawing.Point(160, 26);
+            labelInfo.Location = new System.Drawing.Point(145, 22);
             labelInfo.Name = "labelInfo";
-            labelInfo.Size = new System.Drawing.Size(265, 45);
+            labelInfo.Size = new System.Drawing.Size(302, 30);
             labelInfo.TabIndex = 0;
-            labelInfo.Text = "Are you sure that you want to exit RSBot?\r\nThis will disconnect you from the Silkroad Server!\r\n\r\n";
+            labelInfo.Text = "Are you sure you want to close RSBot and the game client?\r\nChoose how the client should be closed:";
             // 
             // panel1
             // 
@@ -62,18 +63,18 @@
             panel1.Controls.Add(btnNo);
             panel1.Controls.Add(btnYes);
             panel1.Dock = System.Windows.Forms.DockStyle.Bottom;
-            panel1.Location = new System.Drawing.Point(0, 129);
+            panel1.Location = new System.Drawing.Point(0, 161);
             panel1.Name = "panel1";
             panel1.Radius = 0;
             panel1.ShadowDepth = 0F;
-            panel1.Size = new System.Drawing.Size(441, 49);
+            panel1.Size = new System.Drawing.Size(480, 49);
             panel1.TabIndex = 1;
             // 
             // btnNo
             // 
             btnNo.Color = System.Drawing.Color.Transparent;
             btnNo.DialogResult = System.Windows.Forms.DialogResult.No;
-            btnNo.Location = new System.Drawing.Point(349, 14);
+            btnNo.Location = new System.Drawing.Point(389, 14);
             btnNo.Name = "btnNo";
             btnNo.Radius = 2;
             btnNo.ShadowDepth = 4F;
@@ -87,7 +88,7 @@
             btnYes.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
             btnYes.Color = System.Drawing.Color.Transparent;
             btnYes.DialogResult = System.Windows.Forms.DialogResult.Yes;
-            btnYes.Location = new System.Drawing.Point(268, 14);
+            btnYes.Location = new System.Drawing.Point(308, 14);
             btnYes.Name = "btnYes";
             btnYes.Radius = 2;
             btnYes.ShadowDepth = 4F;
@@ -95,21 +96,28 @@
             btnYes.TabIndex = 0;
             btnYes.Text = "Yes";
             btnYes.UseVisualStyleBackColor = true;
-            // 
-            // checkDontAskAgain
-            // 
-            checkDontAskAgain.AutoSize = true;
-            checkDontAskAgain.Depth = 0;
-            checkDontAskAgain.Location = new System.Drawing.Point(9, 139);
-            checkDontAskAgain.Margin = new System.Windows.Forms.Padding(0);
-            checkDontAskAgain.MouseLocation = new System.Drawing.Point(-1, -1);
-            checkDontAskAgain.Name = "checkDontAskAgain";
-            checkDontAskAgain.Ripple = true;
-            checkDontAskAgain.Size = new System.Drawing.Size(114, 30);
-            checkDontAskAgain.TabIndex = 2;
-            checkDontAskAgain.Text = "Don't ask again";
-            checkDontAskAgain.UseVisualStyleBackColor = false;
-            checkDontAskAgain.CheckedChanged += checkDontAskAgain_CheckedChanged;
+            //
+            // radioGraceful
+            //
+            radioGraceful.AutoSize = true;
+            radioGraceful.Checked = true;
+            radioGraceful.Location = new System.Drawing.Point(145, 72);
+            radioGraceful.Name = "radioGraceful";
+            radioGraceful.Size = new System.Drawing.Size(279, 19);
+            radioGraceful.TabIndex = 1;
+            radioGraceful.TabStop = true;
+            radioGraceful.Text = "Graceful (logout first, force close after 7 seconds)";
+            radioGraceful.UseVisualStyleBackColor = true;
+            //
+            // radioForced
+            //
+            radioForced.AutoSize = true;
+            radioForced.Location = new System.Drawing.Point(145, 104);
+            radioForced.Name = "radioForced";
+            radioForced.Size = new System.Drawing.Size(201, 19);
+            radioForced.TabIndex = 2;
+            radioForced.Text = "Forced (close client immediately)";
+            radioForced.UseVisualStyleBackColor = true;
             // 
             // pictureBox1
             // 
@@ -127,9 +135,10 @@
             AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             CancelButton = btnNo;
-            ClientSize = new System.Drawing.Size(441, 178);
+            ClientSize = new System.Drawing.Size(480, 210);
             Controls.Add(labelInfo);
-            Controls.Add(checkDontAskAgain);
+            Controls.Add(radioForced);
+            Controls.Add(radioGraceful);
             Controls.Add(pictureBox1);
             Controls.Add(panel1);
             ForeColor = System.Drawing.Color.Black;
@@ -154,6 +163,7 @@
         private System.Windows.Forms.PictureBox pictureBox1;
         private SDUI.Controls.Button btnNo;
         private SDUI.Controls.Button btnYes;
-        private SDUI.Controls.CheckBox checkDontAskAgain;
+        private System.Windows.Forms.RadioButton radioGraceful;
+        private System.Windows.Forms.RadioButton radioForced;
     }
 }

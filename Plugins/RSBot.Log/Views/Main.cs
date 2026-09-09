@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using RSBot.Core;
 using RSBot.Core.Event;
@@ -18,14 +18,33 @@ public partial class Main : DoubleBufferedControl
 {
     private const int MaxVisibleLogCharacters = 200_000;
     private readonly ConcurrentQueue<LogEntry> _pendingLogs = new();
-    private readonly ConcurrentQueue<FileBatch> _pendingFileWrites = new();
     private readonly System.Windows.Forms.Timer _flushTimer;
-    private int _fileWriterRunning;
+    private const int SbVert = 1;
+    private const uint SifAll = 0x17;
 
     public Main()
     {
         InitializeComponent();
         LoadConfig();
+
+        var openLogFolder = new System.Windows.Forms.Button
+        {
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Location = new Point(475, 10),
+            Size = new Size(140, 28),
+            Text = "Open log folder",
+        };
+        openLogFolder.Click += (_, _) =>
+        {
+            var path = RSBot.Core.Log.CurrentFilePath;
+            var directory = string.IsNullOrWhiteSpace(path)
+                ? Path.Combine(Kernel.BasePath, "User", "Logs", "Sessions")
+                : Path.GetDirectoryName(path);
+            Directory.CreateDirectory(directory!);
+            Process.Start(new ProcessStartInfo("explorer.exe", directory!) { UseShellExecute = true });
+        };
+        panel1.Controls.Add(openLogFolder);
+        openLogFolder.BringToFront();
 
         _flushTimer = new System.Windows.Forms.Timer { Interval = 100 };
         _flushTimer.Tick += FlushTimer_Tick;
@@ -35,13 +54,7 @@ public partial class Main : DoubleBufferedControl
         EventManager.SubscribeEvent("OnAddLog", new Action<string, LogLevel>(AppendLog));
 
         if (!Kernel.Debug)
-        {
             checkDebug.Checked = false;
-            checkError.Visible = false;
-            checkNormal.Visible = false;
-            checkWarning.Visible = false;
-            checkDebug.Visible = false;
-        }
     }
 
     public void AppendLog(string message, LogLevel level = LogLevel.Notify)
@@ -58,8 +71,6 @@ public partial class Main : DoubleBufferedControl
         }
 
         var visibleText = new StringBuilder();
-        var fileBatches = new Dictionary<string, StringBuilder>(StringComparer.OrdinalIgnoreCase);
-
         while (_pendingLogs.TryDequeue(out var entry))
         {
             if (!ShouldDisplay(entry.Level))
@@ -68,44 +79,36 @@ public partial class Main : DoubleBufferedControl
             var line = $"[{entry.Timestamp:HH:mm:ss}]\t<{entry.Level}> \t{entry.Message}{Environment.NewLine}";
             visibleText.Append(line);
 
-            if (!Kernel.Debug)
-                continue;
-
-            var logFile = Path.Combine(
-                Kernel.BasePath,
-                "User",
-                "Logs",
-                Game.Player == null ? "Environment" : Game.Player.Name,
-                $"{entry.Timestamp:dd-MM-yyyy}.txt"
-            );
-
-            if (!fileBatches.TryGetValue(logFile, out var fileText))
-            {
-                fileText = new StringBuilder();
-                fileBatches.Add(logFile, fileText);
-            }
-
-            fileText.Append(line);
         }
 
         if (visibleText.Length > 0)
         {
+            var selectionStart = txtLog.SelectionStart;
+            var selectionLength = txtLog.SelectionLength;
+            var scrollInfo = GetVerticalScrollInfo(txtLog.Handle);
+            var followTail = scrollInfo.nPos + scrollInfo.nPage >= scrollInfo.nMax;
             var overflow = txtLog.TextLength + visibleText.Length - MaxVisibleLogCharacters;
             if (overflow > 0 && txtLog.TextLength > 0)
             {
                 txtLog.Select(0, Math.Min(overflow, txtLog.TextLength));
                 txtLog.SelectedText = string.Empty;
+                selectionStart = Math.Max(0, selectionStart - overflow);
             }
 
             txtLog.AppendText(visibleText.ToString());
-            txtLog.SelectionStart = txtLog.TextLength;
-            txtLog.ScrollToCaret();
+            if (followTail)
+            {
+                txtLog.SelectionStart = txtLog.TextLength;
+                txtLog.SelectionLength = 0;
+                txtLog.ScrollToCaret();
+            }
+            else
+            {
+                txtLog.Select(Math.Min(selectionStart, txtLog.TextLength), Math.Min(selectionLength, txtLog.TextLength - Math.Min(selectionStart, txtLog.TextLength)));
+                scrollInfo.fMask = 0x4; // SIF_POS only; do not restore the old scrollbar range.
+                SetScrollInfo(txtLog.Handle, SbVert, ref scrollInfo, true);
+            }
         }
-
-        foreach (var fileBatch in fileBatches)
-            _pendingFileWrites.Enqueue(new FileBatch(fileBatch.Key, fileBatch.Value.ToString()));
-
-        StartFileWriter();
     }
 
     private bool ShouldDisplay(LogLevel level)
@@ -118,38 +121,6 @@ public partial class Main : DoubleBufferedControl
             LogLevel.Warning => checkWarning.Checked,
             _ => true
         };
-    }
-
-    private void StartFileWriter()
-    {
-        if (_pendingFileWrites.IsEmpty || Interlocked.CompareExchange(ref _fileWriterRunning, 1, 0) != 0)
-            return;
-
-        _ = Task.Run(ProcessFileWrites);
-    }
-
-    private void ProcessFileWrites()
-    {
-        do
-        {
-            while (_pendingFileWrites.TryDequeue(out var batch))
-            {
-                try
-                {
-                    var directory = Path.GetDirectoryName(batch.Path);
-                    if (!Directory.Exists(directory))
-                        Directory.CreateDirectory(directory);
-
-                    File.AppendAllText(batch.Path, batch.Text);
-                }
-                catch (Exception exception)
-                {
-                    System.Diagnostics.Debug.WriteLine(exception);
-                }
-            }
-
-            Interlocked.Exchange(ref _fileWriterRunning, 0);
-        } while (!_pendingFileWrites.IsEmpty && Interlocked.CompareExchange(ref _fileWriterRunning, 1, 0) == 0);
     }
 
     private void LoadConfig()
@@ -182,15 +153,28 @@ public partial class Main : DoubleBufferedControl
         public LogLevel Level { get; }
     }
 
-    private readonly struct FileBatch
+    private static ScrollInfo GetVerticalScrollInfo(IntPtr handle)
     {
-        public FileBatch(string path, string text)
-        {
-            Path = path;
-            Text = text;
-        }
-
-        public string Path { get; }
-        public string Text { get; }
+        var info = new ScrollInfo { cbSize = (uint)Marshal.SizeOf<ScrollInfo>(), fMask = SifAll };
+        GetScrollInfo(handle, SbVert, ref info);
+        return info;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ScrollInfo
+    {
+        public uint cbSize;
+        public uint fMask;
+        public int nMin;
+        public int nMax;
+        public uint nPage;
+        public int nPos;
+        public int nTrackPos;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetScrollInfo(IntPtr hwnd, int bar, ref ScrollInfo info);
+
+    [DllImport("user32.dll")]
+    private static extern int SetScrollInfo(IntPtr hwnd, int bar, ref ScrollInfo info, bool redraw);
 }

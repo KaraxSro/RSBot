@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using CommandLine;
 using CommandLine.Text;
@@ -64,6 +65,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        RegisterUnhandledExceptionLogging();
+
         var parser = new Parser(with => with.HelpWriter = Console.Out);
         var parserResult = parser.ParseArguments<CommandLineOptions>(args);
 
@@ -98,6 +101,29 @@ internal static class Program
 
         splashScreen.Dispose();
         Application.Run(mainForm);
+    }
+
+    private static void RegisterUnhandledExceptionLogging()
+    {
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, eventArgs) =>
+            Log.Fatal(new Exception("Unhandled Windows Forms thread exception", eventArgs.Exception));
+        AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
+        {
+            var exception = eventArgs.ExceptionObject as Exception
+                ?? new Exception($"Unhandled non-Exception object: {eventArgs.ExceptionObject}");
+            Log.Fatal(
+                new Exception(
+                    $"Unhandled AppDomain exception; terminating={eventArgs.IsTerminating}",
+                    exception
+                )
+            );
+        };
+        TaskScheduler.UnobservedTaskException += (_, eventArgs) =>
+        {
+            Log.Fatal(new Exception("Unobserved background task exception", eventArgs.Exception));
+            eventArgs.SetObserved();
+        };
     }
 
     private static void RunOptions(CommandLineOptions options)

@@ -81,6 +81,7 @@ internal class LootPerHour : IStatisticCalculator
 
     private void OnPickupItem(InventoryItem item)
     {
-        _pickedItemCount++;
+        if (CalculatorRegistry.CollectionEnabled)
+            _pickedItemCount++;
     }
 }

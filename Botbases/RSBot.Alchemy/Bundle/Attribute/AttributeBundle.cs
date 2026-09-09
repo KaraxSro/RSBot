@@ -56,7 +56,19 @@ internal class AttributeBundle : IAlchemyBundle
         if (!_shouldRun)
             return;
 
-        if (!config.Attributes.Any())
+        var currentItem = Game.Player.Inventory.GetItemAt(config.Item.Slot);
+        if (currentItem?.ItemId != config.Item.ItemId)
+        {
+            Log.Error("[Alchemy] The selected item is no longer available in its inventory slot.");
+            Kernel.Bot.Stop();
+
+            return;
+        }
+
+        config.Item = currentItem;
+
+        var attributes = config.Attributes.ToList();
+        if (!attributes.Any())
         {
             Log.Error("[Alchemy] No attribute stone fusion configured!");
 
@@ -65,7 +77,7 @@ internal class AttributeBundle : IAlchemyBundle
             return;
         }
 
-        foreach (var attribute in config.Attributes)
+        foreach (var attribute in attributes)
         {
             if (_shouldRun == false)
                 break;
@@ -84,7 +96,25 @@ internal class AttributeBundle : IAlchemyBundle
 
         if (_shouldRun)
         {
-            Log.Notify("[Alchemy] Attribute stone fusing finished!");
+            var targetStatus = string.Join(
+                ", ",
+                attributes.Select(attribute =>
+                {
+                    var slot = ItemAttributesInfo.GetAttributeSlotForItem(attribute.Group, config.Item.Record);
+                    var currentValue = config.Item.Attributes.GetPercentage(slot);
+                    return $"{attribute.Group.GetTranslation()} {currentValue}%/{attribute.MaxValue}%";
+                })
+            );
+            var allTargetsReached = attributes.All(attribute =>
+            {
+                var slot = ItemAttributesInfo.GetAttributeSlotForItem(attribute.Group, config.Item.Record);
+                return config.Item.Attributes.GetPercentage(slot) >= attribute.MaxValue;
+            });
+            var message = allTargetsReached
+                ? $"Alchemy stopped: attribute targets reached ({targetStatus})."
+                : $"Alchemy stopped before all attribute targets were reached ({targetStatus}); no further configured fusion could be started.";
+
+            Globals.View.AddLog(config.Item.Record.GetRealName(), message);
 
             Kernel.Bot.Stop();
         }
@@ -145,6 +175,8 @@ internal class AttributeBundle : IAlchemyBundle
         if (type != AlchemyType.AttributeStone || !Bootstrap.IsActive)
             return;
 
+        RefreshConfiguredItem(newItem);
+
         var changedAttributeSlots = oldItem.Attributes.CompareSlots(newItem.Attributes);
 
         foreach (var slot in changedAttributeSlots)
@@ -172,12 +204,24 @@ internal class AttributeBundle : IAlchemyBundle
         if (type != AlchemyType.AttributeStone || !Bootstrap.IsActive)
             return;
 
+        RefreshConfiguredItem(newItem);
+
         Globals.View.AddLog(
             newItem.Record.GetRealName(),
             Game.ReferenceManager.GetTranslation("UIIT_MSG_REINFORCERR_FAIL")
         );
 
         _shouldRun = true;
+    }
+
+    private static void RefreshConfiguredItem(InventoryItem newItem)
+    {
+        var config = Globals.Botbase.AttributeBundleConfig;
+        if (config?.Item == null || newItem == null)
+            return;
+
+        if (config.Item.Slot == newItem.Slot && config.Item.ItemId == newItem.ItemId)
+            config.Item = newItem;
     }
 
     /// <summary>

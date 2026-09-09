@@ -7,15 +7,18 @@ namespace RSBot.Views;
 
 public partial class ExitDialog : UIWindowBase
 {
+    public enum ClientExitMode
+    {
+        Graceful,
+        Forced,
+    }
+
     public ExitDialog()
     {
         InitializeComponent();
     }
 
-    private void checkDontAskAgain_CheckedChanged(object sender, EventArgs e)
-    {
-        GlobalConfig.Set("RSBot.showExitDialog", !checkDontAskAgain.Checked);
-    }
+    public ClientExitMode ExitMode => radioForced.Checked ? ClientExitMode.Forced : ClientExitMode.Graceful;
 
     private void ExitDialog_Load(object sender, EventArgs e)
     {

@@ -78,6 +78,7 @@ internal class KillsPerHour : IStatisticCalculator
 
     private void OnKillEnemy()
     {
-        _killCount++;
+        if (CalculatorRegistry.CollectionEnabled)
+            _killCount++;
     }
 }

@@ -50,6 +50,7 @@ internal class Loot : IStatisticCalculator
     /// <param name="item">The item.</param>
     private void OnPickupItem(InventoryItem item)
     {
-        _currentValue++;
+        if (CalculatorRegistry.CollectionEnabled)
+            _currentValue++;
     }
 }

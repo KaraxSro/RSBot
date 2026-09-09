@@ -12,11 +12,11 @@
     <RepositoryUrl>https://github.com/SDClowen/RSBot</RepositoryUrl>
     <OutputType>WinExe</OutputType>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>3.0.2</Version>
-    <InformationalVersion>3.0.2</InformationalVersion>
+    <Version>3.0.3</Version>
+    <InformationalVersion>3.0.3</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <AssemblyVersion>3.0.2</AssemblyVersion>
-    <FileVersion>3.0.2</FileVersion>
+    <AssemblyVersion>3.0.3</AssemblyVersion>
+    <FileVersion>3.0.3</FileVersion>
     <PlatformTarget>x86</PlatformTarget>
     <UseWPF>False</UseWPF>
   </PropertyGroup>

@@ -7,6 +7,15 @@ namespace RSBot.Core;
 
 public class Log
 {
+    public static string SessionId => CoreLogFileSink.SessionId;
+    public static string CurrentFilePath => CoreLogFileSink.CurrentFilePath;
+
+    private static void Emit(LogLevel level, string message, string subsystem = "General", string operationId = null)
+    {
+        CoreLogFileSink.Enqueue(DateTime.Now, level, message, subsystem, operationId);
+        EventManager.FireEvent("OnAddLog", message, level);
+    }
+
     /// <summary>
     ///     Replaces the format item in a specified string with the string
     ///     representation of a corresponding object in a specified array
@@ -16,7 +25,7 @@ public class Log
     /// <param name="args">The args</param>
     public static void AppendFormat(LogLevel logLevel, string format, params object[] args)
     {
-        EventManager.FireEvent("OnAddLog", string.Format(format, args), logLevel);
+        Emit(logLevel, string.Format(format, args));
     }
 
     /// <summary>
@@ -26,7 +35,12 @@ public class Log
     /// <param name="message"></param>
     public static void Append(LogLevel logLevel, string message)
     {
-        EventManager.FireEvent("OnAddLog", message, logLevel);
+        Emit(logLevel, message);
+    }
+
+    public static void Append(LogLevel logLevel, string message, string subsystem, string operationId = null)
+    {
+        Emit(logLevel, message, subsystem, operationId);
     }
 
     /// <summary>
@@ -36,7 +50,7 @@ public class Log
     /// <param name="level">The level.</param>
     public static void Notify(object obj)
     {
-        EventManager.FireEvent("OnAddLog", obj.ToString(), LogLevel.Notify);
+        Emit(LogLevel.Notify, obj.ToString());
     }
 
     /// <summary>
@@ -46,7 +60,7 @@ public class Log
     /// <param name="level">The level.</param>
     public static void NotifyLang(string key, params object[] args)
     {
-        EventManager.FireEvent("OnAddLog", LanguageManager.GetLang(key, args), LogLevel.Notify);
+        Emit(LogLevel.Notify, LanguageManager.GetLang(key, args));
     }
 
     /// <summary>
@@ -55,7 +69,7 @@ public class Log
     /// <param name="obj">The message</param>
     public static void Debug(object obj)
     {
-        EventManager.FireEvent("OnAddLog", obj.ToString(), LogLevel.Debug);
+        Emit(LogLevel.Debug, obj.ToString());
     }
 
     /// <summary>
@@ -64,7 +78,7 @@ public class Log
     /// <param name="obj">The message</param>
     public static void Warn(object obj)
     {
-        EventManager.FireEvent("OnAddLog", obj.ToString(), LogLevel.Warning);
+        Emit(LogLevel.Warning, obj.ToString());
     }
 
     /// <summary>
@@ -74,7 +88,7 @@ public class Log
     /// <param name="level">The level.</param>
     public static void WarnLang(string key, params object[] args)
     {
-        EventManager.FireEvent("OnAddLog", LanguageManager.GetLang(key, args), LogLevel.Warning);
+        Emit(LogLevel.Warning, LanguageManager.GetLang(key, args));
     }
 
     /// <summary>
@@ -83,7 +97,7 @@ public class Log
     /// <param name="obj">The message</param>
     public static void Error(object obj)
     {
-        EventManager.FireEvent("OnAddLog", obj.ToString(), LogLevel.Error);
+        Emit(LogLevel.Error, obj.ToString());
     }
 
     /// <summary>
@@ -111,10 +125,10 @@ public class Log
     /// <param name="obj">The message</param>
     public static void Fatal(Exception obj)
     {
-        Warn(obj.Message);
+        Emit(LogLevel.Error, obj.ToString(), "UnhandledException");
 
         var filePath = Path.Combine(Kernel.BasePath, "Data", "Logs", "Exceptions", $"{DateTime.Now:dd-MM-yyyy}.txt");
-        if (!Directory.Exists(filePath))
+        if (!Directory.Exists(Path.GetDirectoryName(filePath)))
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
 
         using (var stream = File.AppendText(filePath))

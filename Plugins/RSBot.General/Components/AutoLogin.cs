@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using RSBot.Core;
 using RSBot.Core.Components;
 using RSBot.Core.Event;
@@ -25,89 +26,123 @@ internal static class AutoLogin
     /// <summary>
     ///     Is the auto login handling <c>true</c> otherwise; <c>false</c>
     /// </summary>
-    private static bool _busy;
+    private static int _busy;
+    private static string _attemptId = "none";
+
+    internal static void RecordState(string message, LogLevel level = LogLevel.Debug)
+    {
+        Log.Append(level, $"[AutoLogin:{_attemptId}] {message}", "AutoLogin", _attemptId);
+    }
 
     /// <summary>
     ///     Does the automatic login.
     /// </summary>
-    public static async void Handle()
+    public static void Handle(string trigger = "gateway event") => _ = HandleAsync(trigger);
+
+    public static async Task RetryAfterAsync(int milliseconds, string trigger)
+    {
+        Log.Debug($"[AutoLogin:{_attemptId}] Retry scheduled in {milliseconds} ms; trigger={trigger}");
+        await Task.Delay(milliseconds);
+        await HandleAsync(trigger);
+    }
+
+    public static async Task HandleAsync(string trigger = "gateway event")
     {
         if (Pending)
+        {
+            Log.Debug($"[AutoLogin:{_attemptId}] Ignored trigger '{trigger}': login is pending in queue");
             return;
+        }
 
-        if (_busy)
+        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
+        {
+            Log.Debug($"[AutoLogin:{_attemptId}] Ignored trigger '{trigger}': another attempt is busy");
             return;
+        }
 
+        _attemptId = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var started = Stopwatch.GetTimestamp();
+        Log.Notify($"[AutoLogin:{_attemptId}] Attempt started; trigger={trigger}; clientLaunch={ClientManager.CurrentLaunchId ?? "none"}");
         Log.StatusLang("WaitingUser");
 
-        _busy = true;
-
-        if (!GlobalConfig.Get<bool>("RSBot.General.EnableAutomatedLogin"))
+        try
         {
-            _busy = false;
-            return;
-        }
-
-        var selectedAccount = Accounts.SavedAccounts?.Find(p =>
-            p.Username == GlobalConfig.Get<string>("RSBot.General.AutoLoginAccountUsername")
-        );
-        if (selectedAccount == null)
-        {
-            _busy = false;
-            Log.WarnLang("NoHaveAccountForAutoLogin");
-            await Task.Delay(5000);
-            ClientlessManager.RequestServerList();
-            return;
-        }
-
-        var server = Serverlist.GetServerByName(selectedAccount.Servername);
-        if (server == null && Serverlist.Servers != null)
-        {
-            Log.NotifyLang("ServerNotFound", selectedAccount.Servername);
-
-            server = Serverlist.Servers.First();
-
-            Log.NotifyLang("SelectedFirstServer", server.Name);
-        }
-
-        // is server check [Lazy :)]
-        if (!server.Status)
-        {
-            _busy = false;
-
-            Log.NotifyLang("ServerCheck");
-
-            await Task.Delay(5000);
-            ClientlessManager.RequestServerList();
-
-            return;
-        }
-
-        //Wait for the configured delay before sending the login request
-        //It is possible to cancel in case of manual login to the server
-        if (GlobalConfig.Get("RSBot.General.EnableLoginDelay", false))
-        {
-            var delay = GlobalConfig.Get("RSBot.General.LoginDelay", 10) * 1000;
-            Cts = new CancellationTokenSource();
-
-            try
+            if (!GlobalConfig.Get<bool>("RSBot.General.EnableAutomatedLogin"))
             {
-                await Task.Delay(delay, Cts.Token);
-            }
-            catch (TaskCanceledException)
-            {
-                _busy = false;
-                Log.Debug("Manual login has been detected. AutoLogin is cancelled this time!");
+                Log.Debug($"[AutoLogin:{_attemptId}] Automatic login is disabled");
                 return;
             }
-            finally
-            {
-                Cts.Dispose();
-                Cts = null;
-            }
-        }
 
-        SendLoginRequest(selectedAccount, server);
+            var selectedAccount = Accounts.SavedAccounts?.Find(p =>
+                p.Username == GlobalConfig.Get<string>("RSBot.General.AutoLoginAccountUsername")
+            );
+            if (selectedAccount == null)
+            {
+                Log.Warn($"[AutoLogin:{_attemptId}] No configured account was found; requesting a fresh server list in 5 seconds");
+                await Task.Delay(5000);
+                ClientlessManager.RequestServerList();
+                return;
+            }
+            Log.Debug($"[AutoLogin:{_attemptId}] Account selected: {Mask(selectedAccount.Username)}; server={selectedAccount.Servername}");
+
+            var server = Serverlist.GetServerByName(selectedAccount.Servername);
+            if (server == null && Serverlist.Servers?.Any() == true)
+            {
+                Log.NotifyLang("ServerNotFound", selectedAccount.Servername);
+
+                server = Serverlist.Servers.First();
+
+                Log.NotifyLang("SelectedFirstServer", server.Name);
+            }
+            if (server == null)
+            {
+                Log.Warn($"[AutoLogin:{_attemptId}] No server is available; requesting server list in 5 seconds");
+                await Task.Delay(5000);
+                ClientlessManager.RequestServerList();
+                return;
+            }
+
+            if (!server.Status)
+            {
+                Log.Notify($"[AutoLogin:{_attemptId}] Server '{server.Name}' is under inspection; retrying server list in 5 seconds");
+                await Task.Delay(5000);
+                ClientlessManager.RequestServerList();
+                return;
+            }
+
+            if (GlobalConfig.Get("RSBot.General.EnableLoginDelay", false))
+            {
+                var delay = GlobalConfig.Get("RSBot.General.LoginDelay", 10) * 1000;
+                Cts = new CancellationTokenSource();
+                Log.Debug($"[AutoLogin:{_attemptId}] Waiting configured login delay: {delay} ms");
+
+                try
+                {
+                    await Task.Delay(delay, Cts.Token);
+                }
+                catch (TaskCanceledException)
+                {
+                    Log.Debug($"[AutoLogin:{_attemptId}] Cancelled because a manual login was detected");
+                    return;
+                }
+                finally
+                {
+                    Cts.Dispose();
+                    Cts = null;
+                }
+            }
+
+            SendLoginRequest(selectedAccount, server);
+        }
+        catch (Exception exception)
+        {
+            Log.Error($"[AutoLogin:{_attemptId}] Unexpected failure: {exception}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _busy, 0);
+            Log.Notify($"[AutoLogin:{_attemptId}] Flow ended; duration={Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s; pending={Pending}");
+        }
     }
 
     /// <summary>
@@ -116,7 +151,10 @@ internal static class AutoLogin
     internal static void SendSecondaryPassword()
     {
         if (Accounts.Joined == null)
+        {
+            Log.Debug($"[AutoLogin:{_attemptId}] Secondary password skipped: no joined account");
             return;
+        }
 
         if (!GlobalConfig.Get<bool>("RSBot.General.EnableAutomatedLogin"))
             return;
@@ -124,7 +162,10 @@ internal static class AutoLogin
         var secondaryPassword = Accounts.Joined.SecondaryPassword;
 
         if (string.IsNullOrWhiteSpace(secondaryPassword))
+        {
+            Log.Debug($"[AutoLogin:{_attemptId}] Secondary password is not configured");
             return;
+        }
 
         Blowfish blowfish = new();
         byte[] key = { 0x0F, 0x07, 0x3D, 0x20, 0x56, 0x62, 0xC9, 0xEB };
@@ -141,6 +182,7 @@ internal static class AutoLogin
         packet.WriteUShort(secondaryPassword.Length);
         packet.WriteBytes(encodedBuffer);
         PacketManager.SendPacket(packet, PacketDestination.Server);
+        Log.Notify($"[AutoLogin:{_attemptId}] Secondary password packet sent (value redacted)");
     }
 
     /// <summary>
@@ -150,7 +192,7 @@ internal static class AutoLogin
     /// <param name="server">The server.</param>
     private static void SendLoginRequest(Account account, Server server)
     {
-        Log.NotifyLang("LoginCredentials", server.Name);
+        Log.Notify($"[AutoLogin:{_attemptId}] Sending login request; account={Mask(account.Username)}; server={server.Name}; channel={account.Channel}");
 
         ushort opcode = 0x6102;
         if (Game.ClientType >= GameClientType.Chinese)
@@ -196,7 +238,6 @@ internal static class AutoLogin
         Accounts.Joined = account;
         Serverlist.Joining = server;
 
-        _busy = false;
     }
 
     /// <summary>
@@ -232,7 +273,7 @@ internal static class AutoLogin
         var captcha = GlobalConfig.Get<string>("RSBot.General.StaticCaptcha");
         captcha ??= string.Empty;
 
-        Log.NotifyLang("EnteringCaptcha", captcha);
+        Log.Notify($"[AutoLogin:{_attemptId}] Sending configured static captcha (value redacted; length={captcha.Length})");
 
         var packet = new Packet(0x6323);
         packet.WriteString(captcha);
@@ -256,5 +297,13 @@ internal static class AutoLogin
         PlayerConfig.Load(character);
 
         EventManager.FireEvent("OnEnterGame");
+        Log.Notify($"[AutoLogin:{_attemptId}] Character entry requested: {Mask(character)}");
+    }
+
+    private static string Mask(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "<empty>";
+        return value.Length <= 2 ? new string('*', value.Length) : $"{value[0]}***{value[^1]}";
     }
 }

@@ -408,11 +408,11 @@ public partial class Main : DoubleBufferedControl
         if (Kernel.Bot.Running || !Game.Ready)
             return;
         if (
-            Bundles.Loot.Config.UseAbilityPet
+            PickupManager.UseAbilityPet
             && Game.Player.HasActiveAbilityPet
             && !PickupManager.RunningAbilityPetPickup
         )
-            PickupManager.RunAbilityPet(Game.Player.Position);
+            _ = PickupManager.RunAbilityPetAsync(Game.Player.Position);
     }
 
     /// <summary>

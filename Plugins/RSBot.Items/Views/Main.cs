@@ -949,6 +949,7 @@ public partial class Main : DoubleBufferedControl
         PlayerConfig.Set("RSBot.Items.Pickup.Blue", checkPickupBlue.Checked);
         PlayerConfig.Set("RSBot.Items.Pickup.Rare", checkPickupRare.Checked);
         PlayerConfig.Set("RSBot.Items.Pickup.Gold", checkPickupGold.Checked);
+        RefreshSelectedItemRuleTestResult();
     }
     #endregion Pickup
 }

@@ -127,6 +127,19 @@ internal class MagicBundle : IAlchemyBundle
         )
             return;
 
+        var currentItem = Game.Player.Inventory.GetItemAt(config.Item.Slot);
+        if (currentItem?.ItemId != config.Item.ItemId)
+        {
+            var message = "Alchemy stopped: the selected item is no longer available in its inventory slot.";
+            Log.Error($"[Alchemy] {message}");
+            Globals.View.AddLog(config.Item.Record.GetRealName(), message);
+            Kernel.Bot.Stop();
+
+            return;
+        }
+
+        config.Item = currentItem;
+
         //Loops over every stone that should be fused
         foreach (var stone in config.MagicStones.Where(i => i.Key.Amount > 0))
         {
@@ -183,7 +196,34 @@ internal class MagicBundle : IAlchemyBundle
 
         if (_shouldRun)
         {
-            Log.Notify("[Alchemy] Magic stone fusing finished!");
+            var targetStatus = string.Join(
+                ", ",
+                config.MagicStones.Select(stone =>
+                {
+                    var current = config.Item.MagicOptions.FirstOrDefault(option =>
+                        option.Record?.Group == stone.Value.Group
+                    );
+                    var target = Game.ReferenceManager
+                        .GetMagicOption(stone.Value.Group, (byte)config.Item.Record.Degree)
+                        ?.GetMaxValue() ?? 0;
+                    return $"{stone.Value.GetGroupTranslation()} {current?.Value ?? 0}/{target}";
+                })
+            );
+            var allTargetsReached = config.MagicStones.All(stone =>
+            {
+                var current = config.Item.MagicOptions.FirstOrDefault(option =>
+                    option.Record?.Group == stone.Value.Group
+                );
+                var target = Game.ReferenceManager
+                    .GetMagicOption(stone.Value.Group, (byte)config.Item.Record.Degree)
+                    ?.GetMaxValue() ?? 0;
+                return target > 0 && current != null && current.Value >= target;
+            });
+            var message = allTargetsReached
+                ? $"Alchemy stopped: magic option targets reached ({targetStatus})."
+                : $"Alchemy stopped before all magic option targets were reached ({targetStatus}); no further configured fusion could be started.";
+
+            Globals.View.AddLog(config.Item.Record.GetRealName(), message);
 
             Kernel.Bot.Stop();
         }
@@ -225,6 +265,8 @@ internal class MagicBundle : IAlchemyBundle
     {
         if (type != AlchemyType.MagicStone || !Bootstrap.IsActive)
             return;
+
+        RefreshConfiguredItem(newItem);
 
         if (oldItem == null)
             return;
@@ -287,12 +329,24 @@ internal class MagicBundle : IAlchemyBundle
         if (type != AlchemyType.MagicStone || !Bootstrap.IsActive)
             return;
 
+        RefreshConfiguredItem(newItem);
+
         Globals.View.AddLog(
             newItem.Record.GetRealName(),
             Game.ReferenceManager.GetTranslation("UIIT_MSG_REINFORCERR_FAIL")
         );
 
         _shouldRun = true;
+    }
+
+    private static void RefreshConfiguredItem(InventoryItem newItem)
+    {
+        var config = Globals.Botbase.MagicBundleConfig;
+        if (config?.Item == null || newItem == null)
+            return;
+
+        if (config.Item.Slot == newItem.Slot && config.Item.ItemId == newItem.ItemId)
+            config.Item = newItem;
     }
 
     /// <summary>

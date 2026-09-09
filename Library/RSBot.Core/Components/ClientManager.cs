@@ -3,10 +3,14 @@ using RSBot.Core.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Eventing.Reader;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +21,11 @@ namespace RSBot.Core.Components;
 public partial class ClientManager
 {
     private static Process _process;
+    private static string _launchId;
+    private static string _launchPhase = "idle";
+    private static DateTime _launchStarted;
+    private static bool _intentionalExit;
+    public static string CurrentLaunchId => _launchId;
     private static readonly string GitHubSignatureUrl =
         "https://raw.githubusercontent.com/myildirimofficial/rsbot/master/client-signatures.cfg";
 
@@ -29,6 +38,11 @@ public partial class ClientManager
     /// Get, has client exited <c>true</c> otherwise; <c>false</c>
     /// </summary>
     public static bool IsRunning => _process?.HasExited == false;
+
+    /// <summary>
+    /// Gets whether the current client is being closed intentionally by RSBot.
+    /// </summary>
+    public static bool IsIntentionalExit => _intentionalExit;
 
     /// <summary>
     /// Loads client signatures from GitHub repository
@@ -102,15 +116,19 @@ public partial class ClientManager
     /// Start the game client
     /// </summary>
     /// <returns>Has successfully started <c>true</c>; otherwise <c>false</c></returns>
-    public static async Task<bool> Start()
+    public static async Task<bool> Start(string reason = "manual")
     {
+        _launchId = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        _launchStarted = DateTime.UtcNow;
+        _intentionalExit = false;
+        SetLaunchPhase("validating", $"Starting client; reason={reason}; clientType={Game.ClientType}; OS={Environment.OSVersion}; rsbot64Bit={Environment.Is64BitProcess}");
         var silkroadDirectory = GlobalConfig.Get<string>("RSBot.SilkroadDirectory");
         var executable = GlobalConfig.Get<string>("RSBot.SilkroadExecutable");
         var path = Path.Combine(silkroadDirectory, executable);
 
         if (!File.Exists(path))
         {
-            Log.Error($"Silkroad executable not found: {path}");
+            LaunchError($"Silkroad executable not found: {path}");
             return false;
         }
 
@@ -119,7 +137,7 @@ public partial class ClientManager
 
         if (!File.Exists(fullPath))
         {
-            Log.Error($"Client library not found: {fullPath}");
+            LaunchError($"Client library not found: {fullPath}");
             return false;
         }
 
@@ -132,12 +150,14 @@ public partial class ClientManager
 
         var args = BuildCommandLineArguments(contentId, divisionIndex, gatewayIndex);
 
-        var si = new STARTUPINFO();
+        LogLaunchFileMetadata("client", path);
+        LogLaunchFileMetadata("loader", fullPath);
+        var si = new STARTUPINFO { cb = (uint)Marshal.SizeOf<STARTUPINFO>() };
 
         CreateMutex(0, false, "Silkroad Online Launcher");
         CreateMutex(0, false, "Ready");
 
-        // Create suspended process
+        SetLaunchPhase("create-process", "Creating suspended client process (arguments redacted)");
         if (!CreateProcess(
             null,
             $"\"{path}\" {args}",
@@ -150,47 +170,70 @@ public partial class ClientManager
             ref si,
             out var pi))
         {
-            Log.Error("Failed to create game process");
+            LaunchWin32Error("CreateProcess");
             return false;
         }
 
-        var semaphore = new Semaphore(0, 1, pi.dwProcessId.ToString());
+        using var semaphore = new Semaphore(0, 1, pi.dwProcessId.ToString());
 
         try
         {
-            PrepareTempConfigFile(pi.dwProcessId, divisionIndex);
+            SetLaunchPhase("process-created", $"Suspended process created; pid={pi.dwProcessId}");
+            if (!PrepareTempConfigFile(pi.dwProcessId, divisionIndex))
+            {
+                CleanupProcess(pi);
+                return false;
+            }
 
             var sroProcess = Process.GetProcessById((int)pi.dwProcessId);
 
             if (RequiresXigncodePatch(Game.ClientType) && !await ApplyXigncodePatch(sroProcess, pi))
+            {
+                CleanupProcess(pi);
                 return false;
+            }
 
             _process = sroProcess;
+            _process.EnableRaisingEvents = true;
+            _process.Exited += ClientProcess_Exited;
+            SetLaunchPhase("monitoring", $"Client exit monitoring registered before resume; pid={pi.dwProcessId}");
 
+            SetLaunchPhase("injecting", "Injecting Client.Library.dll");
             if (!InjectClientLibrary(pi, buffer, pathLen))
             {
                 CleanupProcess(pi);
                 return false;
             }
 
-            ResumeThread(pi.hThread);
+            SetLaunchPhase("resuming", "Resuming client main thread");
+            if (ResumeThread(pi.hThread) == uint.MaxValue)
+            {
+                LaunchWin32Error("ResumeThread");
+                CleanupProcess(pi);
+                return false;
+            }
+            SetLaunchPhase("post-resume", "Client main thread resumed; refreshing process state");
 
             _process.Refresh();
+            SetLaunchPhase("post-resume", $"Process state refreshed; hasExited={_process.HasExited}");
             if (_process.HasExited)
             {
-                Log.Error($"Process exited immediately after start (exit code: 0x{_process.ExitCode:X})");
+                LaunchError($"Process exited immediately after start; exitCode=0x{_process.ExitCode:X}");
                 return false;
             }
 
-            _process.EnableRaisingEvents = true;
-            _process.Exited += ClientProcess_Exited;
-
+            SetLaunchPhase("running", "Client resumed and survived initial validation");
+            _ = LogSurvivalCheckpoints(_process, _launchId);
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            pi.hThread = IntPtr.Zero;
+            pi.hProcess = IntPtr.Zero;
             EventManager.FireEvent("OnStartClient");
             return true;
         }
         catch (Exception ex)
         {
-            Log.Error($"Failed to start client: {ex.Message}");
+            LaunchError($"Failed to start client: {ex}");
             CleanupProcess(pi);
             return false;
         }
@@ -229,7 +272,7 @@ public partial class ClientManager
         var handle = pi.hProcess;
         if (handle == IntPtr.Zero)
         {
-            Log.Error("Process handle is invalid");
+                LaunchError("Process handle is invalid");
             return false;
         }
 
@@ -238,14 +281,14 @@ public partial class ClientManager
             var kernelHandle = GetModuleHandleW("kernel32.dll");
             if (kernelHandle == IntPtr.Zero)
             {
-                Log.Error("Failed to get kernel32.dll handle");
+                LaunchWin32Error("GetModuleHandleW(kernel32.dll)");
                 return false;
             }
 
             var loadLibAddr = GetProcAddress(kernelHandle, "LoadLibraryW");
             if (loadLibAddr == IntPtr.Zero)
             {
-                Log.Error("Failed to get LoadLibraryW address");
+                LaunchWin32Error("GetProcAddress(LoadLibraryW)");
                 return false;
             }
 
@@ -258,7 +301,7 @@ public partial class ClientManager
 
             if (remotePath == IntPtr.Zero)
             {
-                Log.Error("Failed to allocate remote memory");
+                LaunchWin32Error("VirtualAllocEx");
                 return false;
             }
 
@@ -266,7 +309,7 @@ public partial class ClientManager
             {
                 if (!WriteProcessMemory(handle, remotePath, buffer, pathLen, out _))
                 {
-                    Log.Error("Failed to write library path to remote process");
+                    LaunchWin32Error("WriteProcessMemory");
                     return false;
                 }
 
@@ -281,7 +324,7 @@ public partial class ClientManager
 
                 if (remoteThread == IntPtr.Zero)
                 {
-                    Log.Error("Failed to create remote thread");
+                    LaunchWin32Error("CreateRemoteThread");
                     return false;
                 }
 
@@ -289,28 +332,33 @@ public partial class ClientManager
                 {
                     Log.Debug("Waiting for LoadLibraryW to complete (10s timeout)...");
                     var waitResult = WaitForSingleObject(remoteThread, 10000);
-                    if (waitResult != 0)
+                    if (waitResult != WAIT_OBJECT_0)
                     {
-                        Log.Error("LoadLibraryW timed out after 10 seconds. The DLL injection may have deadlocked.");
+                        if (waitResult == WAIT_TIMEOUT)
+                            LaunchError("LoadLibraryW timed out after 10 seconds; the loader may have deadlocked");
+                        else if (waitResult == WAIT_FAILED)
+                            LaunchWin32Error("WaitForSingleObject(LoadLibraryW)");
+                        else
+                            LaunchError($"LoadLibraryW wait returned unexpected result 0x{waitResult:X}");
                         return false;
                     }
 
                     if (!GetExitCodeThread(remoteThread, out var exitCode))
                     {
-                        Log.Error("Failed to get remote thread exit code");
+                        LaunchWin32Error("GetExitCodeThread");
                         return false;
                     }
 
                     if (exitCode == 0)
                     {
-                        Log.Error("LoadLibraryW failed: DLL could not be loaded. Verify the library exists and is compatible with the target process.");
+                        LaunchError("LoadLibraryW returned null; DLL could not be loaded or is incompatible");
                         return false;
                     }
 
                     // NTSTATUS error codes have the high two bits set (0xC0000000+)
                     if (exitCode >= 0xC0000000)
                     {
-                        Log.Error($"LoadLibraryW crashed with NTSTATUS 0x{exitCode:X}. The DLL may be incompatible with the target process.");
+                        LaunchError($"LoadLibraryW remote thread returned NTSTATUS 0x{exitCode:X}");
                         return false;
                     }
 
@@ -388,6 +436,7 @@ public partial class ClientManager
         catch (Exception ex)
         {
             Log.Error($"XIGNCODE patching exception: {ex.Message}");
+            return false;
         }
         finally
         {
@@ -407,6 +456,8 @@ public partial class ClientManager
 
         try
         {
+            _intentionalExit = true;
+            SetLaunchPhase("terminating", "RSBot intentionally terminating the client");
             _process.Kill();
         }
         catch (Exception ex)
@@ -438,14 +489,181 @@ public partial class ClientManager
     /// </summary>
     private static void ClientProcess_Exited(object sender, EventArgs e)
     {
-        Log.Warn("Client process exited!");
+        var process = sender as Process ?? _process;
+        var exitCode = "unavailable";
+        var processId = 0;
+        try { processId = process.Id; } catch { }
+        try { exitCode = $"0x{process.ExitCode:X}"; } catch { }
+        var lifetime = DateTime.UtcNow - _launchStarted;
+        Log.Warn($"[ClientLaunch:{_launchId}] Client process exited; exitCode={exitCode}; lifetime={lifetime.TotalSeconds:F1}s; phase={_launchPhase}; intentional={_intentionalExit}");
+        if (!_intentionalExit && lifetime < TimeSpan.FromMinutes(1))
+            _ = Task.Run(() => LogRecentWindowsCrashEvidence(processId));
         EventManager.FireEvent("OnExitClient");
+    }
+
+    /// <summary>
+    /// Marks the current client shutdown as intentional so disconnect handlers do not start recovery actions.
+    /// </summary>
+    public static void BeginIntentionalExit(string reason)
+    {
+        _intentionalExit = true;
+        SetLaunchPhase("exiting", reason);
+    }
+
+    /// <summary>
+    /// Restores normal disconnect handling when an intentional shutdown could not be completed.
+    /// </summary>
+    public static void CancelIntentionalExit(string reason)
+    {
+        _intentionalExit = false;
+        SetLaunchPhase("running", reason);
+    }
+
+    /// <summary>
+    /// Asks the client window to close normally.
+    /// </summary>
+    public static bool RequestClose()
+    {
+        if (!IsRunning)
+            return true;
+
+        try
+        {
+            BeginIntentionalExit("Requesting a graceful client window close");
+            return _process.CloseMainWindow();
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to request a graceful client close: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Waits asynchronously for the client process to exit.
+    /// </summary>
+    public static async Task<bool> WaitForExitAsync(int milliseconds)
+    {
+        var process = _process;
+        if (process == null)
+            return true;
+
+        try
+        {
+            process.Refresh();
+            if (process.HasExited)
+                return true;
+
+            var exitTask = process.WaitForExitAsync();
+            var completedTask = await Task.WhenAny(exitTask, Task.Delay(milliseconds));
+            return completedTask == exitTask;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed while waiting for the client to exit: {ex.Message}");
+            return !IsRunning;
+        }
+    }
+
+    public static void MarkProxyConnected()
+    {
+        SetLaunchPhase("proxy-connected", "Client connected to the RSBot proxy");
+    }
+
+    private static void SetLaunchPhase(string phase, string message)
+    {
+        _launchPhase = phase;
+        Log.Notify($"[ClientLaunch:{_launchId}] [{phase}] {message}");
+    }
+
+    private static void LaunchError(string message) => Log.Error($"[ClientLaunch:{_launchId}] [{_launchPhase}] {message}");
+
+    private static void LaunchWin32Error(string operation)
+    {
+        var code = Marshal.GetLastWin32Error();
+        LaunchError($"{operation} failed; win32={code} (0x{code:X}); message={new Win32Exception(code).Message}");
+    }
+
+    private static void LogLaunchFileMetadata(string name, string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            using var stream = File.OpenRead(path);
+            var hash = Convert.ToHexString(SHA256.HashData(stream));
+            var version = FileVersionInfo.GetVersionInfo(path).FileVersion ?? "unknown";
+            SetLaunchPhase("validating", $"{name}: path={path}; version={version}; size={file.Length}; modifiedUtc={file.LastWriteTimeUtc:O}; sha256={hash}");
+        }
+        catch (Exception exception)
+        {
+            LaunchError($"Could not read {name} metadata: {exception.Message}");
+        }
+    }
+
+    private static async Task LogSurvivalCheckpoints(Process process, string launchId)
+    {
+        foreach (var seconds in new[] { 2, 10, 30 })
+        {
+            await Task.Delay(TimeSpan.FromSeconds(seconds == 2 ? 2 : seconds == 10 ? 8 : 20));
+            if (launchId != _launchId)
+                return;
+            try
+            {
+                process.Refresh();
+                if (process.HasExited)
+                    return;
+                Log.Debug($"[ClientLaunch:{launchId}] survival checkpoint +{seconds}s; workingSet={process.WorkingSet64}");
+            }
+            catch (Exception exception)
+            {
+                Log.Debug($"[ClientLaunch:{launchId}] survival checkpoint unavailable: {exception.Message}");
+                return;
+            }
+        }
+    }
+
+    private static void LogRecentWindowsCrashEvidence(int processId)
+    {
+        try
+        {
+            var query = new EventLogQuery(
+                "Application",
+                PathType.LogName,
+                "*[System[(EventID=1000 or EventID=1001) and TimeCreated[timediff(@SystemTime) <= 120000]]]"
+            ) { ReverseDirection = true };
+            using var reader = new EventLogReader(query);
+            for (var count = 0; count < 20; count++)
+            {
+                using var record = reader.ReadEvent();
+                if (record == null)
+                    break;
+                var values = record.Properties.Select(property => property.Value?.ToString() ?? string.Empty).ToArray();
+                if (!values.Any(value => value.Contains("sro_client", StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var application = values.ElementAtOrDefault(0) ?? "sro_client.exe";
+                var module = values.ElementAtOrDefault(3) ?? "unavailable";
+                var exceptionCode = values.ElementAtOrDefault(6) ?? "unavailable";
+                var faultOffset = values.ElementAtOrDefault(7) ?? "unavailable";
+                Log.Warn($"[ClientLaunch:{_launchId}] Windows crash evidence: event={record.Id}; pid={processId}; application={application}; module={module}; exceptionCode={exceptionCode}; offset={faultOffset}");
+                return;
+            }
+            Log.Debug($"[ClientLaunch:{_launchId}] Windows crash evidence unavailable: no matching recent Application Error/WER event for pid={processId}");
+        }
+        catch (Exception exception)
+        {
+            Log.Debug($"[ClientLaunch:{_launchId}] Windows crash evidence unavailable: {exception.GetType().Name}: {exception.Message}");
+        }
     }
 
     /// <summary>
     /// Prepare the config file for loader
     /// </summary>
-    private static void PrepareTempConfigFile(uint processId, int divisionIndex)
+    private static bool PrepareTempConfigFile(uint processId, int divisionIndex)
     {
         try
         {
@@ -468,10 +686,16 @@ public partial class ClientManager
                 writer.WriteAscii(gatewayServer);
 
             writer.Write(gatewayPort);
+            writer.WriteAscii(Log.SessionId);
+            writer.WriteAscii(_launchId ?? string.Empty);
+            writer.WriteAscii(Log.CurrentFilePath ?? string.Empty);
+            SetLaunchPhase("loader-config", $"Temporary loader configuration written; pid={processId}; division={divisionIndex}; gatewayCount={division.GatewayServers.Count}; loaderDebug={GlobalConfig.Get<bool>("RSBot.Loader.DebugMode")}");
+            return true;
         }
         catch (Exception ex)
         {
-            Log.Error($"Failed to prepare temp config file: {ex.Message}");
+            LaunchError($"Failed to prepare temporary loader configuration: {ex.Message}");
+            return false;
         }
     }
 
@@ -529,7 +753,12 @@ public partial class ClientManager
                 try
                 {
                     var process = Process.GetProcessById((int)pi.dwProcessId);
-                    process?.Kill();
+                    if (process?.HasExited == false)
+                    {
+                        _intentionalExit = true;
+                        SetLaunchPhase("cleanup", $"Terminating suspended client after setup failure; pid={pi.dwProcessId}");
+                        process.Kill();
+                    }
                 }
                 catch (ArgumentException)
                 {

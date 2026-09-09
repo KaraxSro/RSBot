@@ -38,7 +38,7 @@ internal static class RuSroAuthService
             return false;
         }
 
-        Log.Debug(selectedAccount?.Username);
+        Log.Debug("[RuSroAuth] Account selected (username redacted)");
 
         string username = selectedAccount.Username;
         string password = selectedAccount.Password;
@@ -46,7 +46,7 @@ internal static class RuSroAuthService
         try
         {
             string accessToken = await GetAccessTokenAsync(username, password);
-            Log.Debug("Access Token: " + accessToken);
+            Log.Debug($"[RuSroAuth] Access token received={(!string.IsNullOrEmpty(accessToken))} (value redacted)");
             if (!string.IsNullOrEmpty(accessToken))
             {
                 await ConnectToWSAndSend();
@@ -64,8 +64,7 @@ internal static class RuSroAuthService
     private static async Task<SESSION_STATE> Activate(string confirmationCode)
     {
         var sessionId = GlobalConfig.Get<string>("RSBot.RuSro.sessionId", "").Trim();
-        Log.Debug($"Sessions ID: {sessionId}");
-        Log.Debug($"PIN: {confirmationCode}");
+        Log.Debug($"[RuSroAuth] Activation requested; sessionPresent={!string.IsNullOrEmpty(sessionId)}; pinPresent={!string.IsNullOrEmpty(confirmationCode)} (values redacted)");
 
         if (string.IsNullOrEmpty(sessionId))
         {
@@ -95,8 +94,7 @@ internal static class RuSroAuthService
         );
         var confirmationResponseContent = await confirmationResponse.Content.ReadAsStringAsync();
 
-        Log.Debug("Activation Response:");
-        Log.Debug(confirmationResponseContent);
+        Log.Debug($"[RuSroAuth] Activation response; status={(int)confirmationResponse.StatusCode}; bodyLength={confirmationResponseContent.Length} (body redacted)");
 
         if (confirmationResponse.IsSuccessStatusCode)
         {
@@ -144,8 +142,7 @@ internal static class RuSroAuthService
         GlobalConfig.Set("RSBot.RuSro.launcherid", launcherId);
         GlobalConfig.Save();
 
-        Log.Debug($"HWID: {hwid}");
-        Log.Debug($"Launcher ID: {launcherId}");
+        Log.Debug("[RuSroAuth] Hardware and launcher identifiers configured (values redacted)");
 
         client.DefaultRequestHeaders.Add("Hardware-Id", hwid);
         client.DefaultRequestHeaders.Add("Launcher-Id", launcherId);
@@ -395,7 +392,7 @@ internal static class RuSroAuthService
             Guid.NewGuid().ToString()
         );
 
-        Log.Debug($"Sending payload: {payload}");
+        Log.Debug("[RuSroAuth] Sending getGameAccount request (payload redacted)");
         await SendMessage(clientWebSocket, payload);
 
         int attempts = 0;
@@ -404,7 +401,7 @@ internal static class RuSroAuthService
         {
             attempts++;
             string response = await ReceiveMessage(clientWebSocket);
-            Log.Debug($"Received: {response}");
+            Log.Debug($"[RuSroAuth] getGameAccount response received; length={response.Length} (body redacted)");
 
             using (JsonDocument document = JsonDocument.Parse(response))
             {
@@ -435,7 +432,7 @@ internal static class RuSroAuthService
                         .Any(p => p.TryGetProperty("type", out var type) && type.GetString() == "pushNotification")
                 )
                 {
-                    Log.Notify($"4game pushed notification: {response}");
+                    Log.Notify("[RuSroAuth] 4game push notification received (body redacted)");
                     continue;
                 }
 
@@ -448,13 +445,13 @@ internal static class RuSroAuthService
                         .Any(p => p.TryGetProperty("type", out var type) && type.GetString() == "webFeed")
                 )
                 {
-                    Log.Notify($"4game pushed webFeed: {response}");
+                    Log.Notify("[RuSroAuth] 4game web-feed notification received (body redacted)");
                     continue;
                 }
 
                 if (!document.RootElement.TryGetProperty("result", out JsonElement resultElement))
                 {
-                    Log.Error($"Response does not contain 'result': {response}");
+                    Log.Error("[RuSroAuth] getGameAccount response has no result field (body redacted)");
                     throw new Exception("Unexpected response format: 'result' key is missing");
                 }
 
@@ -474,7 +471,7 @@ internal static class RuSroAuthService
         string payload =
             $"{{\"jsonrpc\":\"2.0\",\"method\":\"createGameTokenCode\",\"params\":{{\"accessToken\":\"{accessToken}\",\"ignoreLicenseAcceptance\":false,\"login\":\"{login}\",\"masterId\":\"{sub}\",\"toPartnerId\":\"silk-ru\",\"lang\":\"ru\"}},\"id\":\"{Guid.NewGuid()}\"}}";
 
-        Log.Debug($"Sending first payload: {payload}");
+        Log.Debug("[RuSroAuth] Sending createGameTokenCode request (credentials and payload redacted)");
         await SendMessage(clientWebSocket, payload);
 
         int attempts = 0;
@@ -483,7 +480,7 @@ internal static class RuSroAuthService
         {
             attempts++;
             string response = await ReceiveMessage(clientWebSocket);
-            Log.Debug($"Received response: {response}");
+            Log.Debug($"[RuSroAuth] createGameTokenCode response received; length={response.Length} (body redacted)");
 
             using (JsonDocument document = JsonDocument.Parse(response))
             {
@@ -514,7 +511,7 @@ internal static class RuSroAuthService
                         .Any(p => p.TryGetProperty("type", out var type) && type.GetString() == "serviceStatusChanged")
                 )
                 {
-                    Log.Notify($"4game service status changed: {response}");
+                    Log.Notify("[RuSroAuth] 4game service status changed (body redacted)");
                     continue;
                 }
 
@@ -527,7 +524,7 @@ internal static class RuSroAuthService
                         .Any(p => p.TryGetProperty("type", out var type) && type.GetString() == "pushNotification")
                 )
                 {
-                    Log.Notify($"4game pushed notification: {response}");
+                    Log.Notify("[RuSroAuth] 4game push notification received (body redacted)");
                     continue;
                 }
 
@@ -545,11 +542,11 @@ internal static class RuSroAuthService
                     string acceptLicensePayload =
                         $"{{\"jsonrpc\":\"2.0\",\"method\":\"acceptLicense\",\"params\":{{\"userId\":{sub},\"licenseAgreementId\":{licenseAgreementId},\"lang\":\"ru\"}},\"id\":\"{Guid.NewGuid()}\"}}";
 
-                    Log.Debug($"Sending acceptLicense payload: {acceptLicensePayload}");
+                    Log.Debug("[RuSroAuth] Sending license-acceptance request (payload redacted)");
                     await SendMessage(clientWebSocket, acceptLicensePayload);
 
                     string acceptResponse = await ReceiveMessage(clientWebSocket);
-                    Log.Debug($"Received acceptLicense response: {acceptResponse}");
+                    Log.Debug($"[RuSroAuth] License-acceptance response received; length={acceptResponse.Length} (body redacted)");
 
                     using (JsonDocument acceptDocument = JsonDocument.Parse(acceptResponse))
                     {
@@ -572,7 +569,7 @@ internal static class RuSroAuthService
 
                 if (!document.RootElement.TryGetProperty("result", out JsonElement resultElement))
                 {
-                    Log.Error($"Response does not contain 'result': {response}");
+                    Log.Error("[RuSroAuth] createGameTokenCode response has no result field (body redacted)");
                     throw new Exception("Unexpected response format: 'result' key is missing");
                 }
 
@@ -605,8 +602,7 @@ internal static class RuSroAuthService
 
     private static void SaveCredentials(string login, string password)
     {
-        Log.Debug($"Extracted login: {login}");
-        Log.Debug($"Extracted password: {password}");
+        Log.Debug("[RuSroAuth] Game credentials extracted and stored (values redacted)");
 
         GlobalConfig.Set("RSBot.RuSro.login", login);
         GlobalConfig.Set("RSBot.RuSro.password", password);

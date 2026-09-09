@@ -43,6 +43,7 @@
             contextMenuStrip = new SDUI.Controls.ContextMenuStrip();
             resetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             panel1 = new SDUI.Controls.Panel();
+            checkEnableStatistics = new SDUI.Controls.CheckBox();
             btnReset = new SDUI.Controls.Button();
             timer = new System.Windows.Forms.Timer(components);
             ((System.ComponentModel.ISupportInitialize)splitContainer1).BeginInit();
@@ -166,6 +167,7 @@
             panel1.BackColor = System.Drawing.Color.Transparent;
             panel1.Border = new System.Windows.Forms.Padding(0, 1, 0, 0);
             panel1.BorderColor = System.Drawing.Color.Transparent;
+            panel1.Controls.Add(checkEnableStatistics);
             panel1.Controls.Add(btnReset);
             panel1.Dock = System.Windows.Forms.DockStyle.Bottom;
             panel1.Location = new System.Drawing.Point(10, 461);
@@ -174,7 +176,24 @@
             panel1.ShadowDepth = 4F;
             panel1.Size = new System.Drawing.Size(483, 35);
             panel1.TabIndex = 2;
-            // 
+            //
+            // checkEnableStatistics
+            //
+            checkEnableStatistics.AutoSize = true;
+            checkEnableStatistics.Checked = true;
+            checkEnableStatistics.CheckState = System.Windows.Forms.CheckState.Checked;
+            checkEnableStatistics.Depth = 0;
+            checkEnableStatistics.Location = new System.Drawing.Point(3, 3);
+            checkEnableStatistics.Margin = new System.Windows.Forms.Padding(0);
+            checkEnableStatistics.MouseLocation = new System.Drawing.Point(-1, -1);
+            checkEnableStatistics.Name = "checkEnableStatistics";
+            checkEnableStatistics.Ripple = true;
+            checkEnableStatistics.Size = new System.Drawing.Size(171, 30);
+            checkEnableStatistics.TabIndex = 1;
+            checkEnableStatistics.Text = "Enable statistics collection";
+            checkEnableStatistics.UseVisualStyleBackColor = false;
+            checkEnableStatistics.CheckedChanged += checkEnableStatistics_CheckedChanged;
+            //
             // btnReset
             // 
             btnReset.Color = System.Drawing.Color.Transparent;
@@ -218,6 +237,7 @@
         private SDUI.Controls.ListView lvStatistics;
         private SDUI.Controls.Panel panel1;
         private SDUI.Controls.Button btnReset;
+        private SDUI.Controls.CheckBox checkEnableStatistics;
         private System.Windows.Forms.ColumnHeader columnHeader1;
         private System.Windows.Forms.ColumnHeader columnHeader2;
         private SDUI.Controls.GroupBox panelLiveFilters;

@@ -35,6 +35,7 @@ internal class GatewayLoginResponse : IPacketHandler
     {
         if (packet.ReadByte() == 0x01)
         {
+            AutoLogin.RecordState("Gateway login accepted", LogLevel.Notify);
             Log.NotifyLang("AuthGetewaySuccess");
             AutoLogin.Pending = false;
             View.PendingWindow?.Hide();
@@ -53,7 +54,7 @@ internal class GatewayLoginResponse : IPacketHandler
                 p.Username == GlobalConfig.Get<string>("RSBot.General.AutoLoginAccountUsername")
             );
 
-            if (Game.ClientType == GameClientType.Global && selectedAccount.Channel == 0x02)
+            if (Game.ClientType == GameClientType.Global && selectedAccount?.Channel == 0x02)
             {
                 packet.ReadUInt(); //Token
                 packet.ReadString(); //IP
@@ -66,6 +67,7 @@ internal class GatewayLoginResponse : IPacketHandler
         }
 
         var code = packet.ReadByte();
+        AutoLogin.RecordState($"Gateway login rejected; code={code}", LogLevel.Warning);
 
         switch (code)
         {
@@ -83,14 +85,14 @@ internal class GatewayLoginResponse : IPacketHandler
 
             case 4:
                 Log.WarnLang("ServerCheck");
-                AutoLogin.Handle();
+                AutoLogin.Handle("server inspection response");
                 break;
 
             case 28: // isro block
             case 29: // ksro block
             case 5:
                 Log.WarnLang("ServerFull");
-                Task.Delay(1000).ContinueWith((e) => AutoLogin.Handle());
+                _ = AutoLogin.RetryAfterAsync(1000, "server full response");
 
                 break;
 
@@ -102,6 +104,7 @@ internal class GatewayLoginResponse : IPacketHandler
 
                 var count = packet.ReadUShort();
                 var timestamp = packet.ReadInt();
+                AutoLogin.RecordState($"Entered gateway queue; position={count}; estimatedWaitMs={timestamp}", LogLevel.Notify);
 
                 Task.Run(() =>
                 {

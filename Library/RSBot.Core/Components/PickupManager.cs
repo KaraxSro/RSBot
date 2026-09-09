@@ -27,7 +27,10 @@ public class PickupManager
     /// <value>
     ///     <c>true</c> if running; otherwise, <c>false</c>.
     /// </value>
-    public static bool RunningAbilityPetPickup { get; private set; }
+    private static int _runningAbilityPetPickup;
+    private static int _abilityPetRunGeneration;
+    private static long _lastActorDiagnostic;
+    public static bool RunningAbilityPetPickup => Volatile.Read(ref _runningAbilityPetPickup) != 0;
 
     /// <summary>
     ///     Gets or sets the pickup items.
@@ -109,16 +112,20 @@ public class PickupManager
     /// <param name="radius">The radius.</param>
     public static void RunPlayer(Position playerPosition, Position centerPosition, int radius = 50)
     {
+        if (UseAbilityPet && Game.Player?.HasActiveAbilityPet == true)
+        {
+            LogActorDecisionThrottled($"Player pickup blocked: pet-only mode active; pet={Game.Player.AbilityPet.UniqueId}; petRun={RunningAbilityPetPickup}");
+            return;
+        }
         if (RunningPlayerPickup)
             return;
 
         RunningPlayerPickup = true;
         try
         {
-            var flag = UseAbilityPet && Game.Player.HasActiveAbilityPet;
             if (
                 !SpawnManager.TryGetEntities<SpawnedItem>(
-                    i => Condition(i, centerPosition, radius, flag, flag),
+                    i => Condition(i, centerPosition, radius),
                     out var entities
                 )
             )
@@ -165,15 +172,31 @@ public class PickupManager
         }
     }
 
-    public static async void RunAbilityPet(Position centerPosition, int radius = 50)
+    public static async Task RunAbilityPetAsync(Position centerPosition, int radius = 50)
     {
-        if (RunningAbilityPetPickup)
+        if (Interlocked.CompareExchange(ref _runningAbilityPetPickup, 1, 0) != 0)
+        {
+            LogActorDecisionThrottled("AbilityPet pickup tick skipped: another pet pickup run is active");
             return;
+        }
 
-        RunningAbilityPetPickup = true;
+        var generation = Volatile.Read(ref _abilityPetRunGeneration);
+        var pet = Game.Player?.AbilityPet;
+        var petUniqueId = pet?.UniqueId ?? 0;
 
         try
         {
+            if (!UseAbilityPet || pet == null)
+            {
+                LogActorDecisionThrottled("AbilityPet pickup aborted: setting disabled or no active pet");
+                return;
+            }
+            Log.Debug($"[Pickup] AbilityPet run started; pet={petUniqueId}; center={centerPosition}; radius={radius}");
+            if (pet.Inventory?.Full == true)
+            {
+                Log.Warn($"[Pickup] AbilityPet inventory is full; pet={petUniqueId}; character fallback is disabled while pet-only mode is active.");
+                return;
+            }
             if (
                 !SpawnManager.TryGetEntities<SpawnedItem>(
                     i => Condition(i, centerPosition, radius, true),
@@ -181,21 +204,33 @@ public class PickupManager
                 )
             )
             {
-                RunningAbilityPetPickup = false;
                 return;
             }
 
             foreach (
-                var item in entities.OrderBy(item => item.Movement.Source.DistanceTo(Game.Player.AbilityPet.Position))
+                var item in entities.OrderBy(item => item.Movement.Source.DistanceTo(pet.Position))
             )
             {
-                if (!RunningAbilityPetPickup)
+                if (generation != Volatile.Read(ref _abilityPetRunGeneration))
                     return;
+
+                var activePet = Game.Player?.AbilityPet;
+                if (activePet == null || activePet.UniqueId != petUniqueId)
+                {
+                    Log.Warn($"[Pickup] AbilityPet run aborted: pet {petUniqueId} disappeared or was replaced; no player fallback.");
+                    return;
+                }
+                if (activePet.Inventory?.Full == true)
+                {
+                    Log.Warn($"[Pickup] AbilityPet run aborted: inventory full for pet {petUniqueId}; no player fallback.");
+                    return;
+                }
 
                 if (item.Record.IsSpecialtyGoodBox && Game.Player.Job2SpecialtyBag.Full)
                     continue;
 
-                await Game.Player.AbilityPet.PickupAsync(item.UniqueId);
+                Log.Debug($"[Pickup] Actor=AbilityPet; pet={petUniqueId}; item={item.UniqueId}/{item.Record.CodeName}");
+                await activePet.PickupAsync(item.UniqueId);
                 await Task.Yield();
             }
         }
@@ -205,8 +240,18 @@ public class PickupManager
         }
         finally
         {
-            RunningAbilityPetPickup = false;
+            Interlocked.Exchange(ref _runningAbilityPetPickup, 0);
+            Log.Debug($"[Pickup] AbilityPet run completed; pet={petUniqueId}");
         }
+    }
+
+    private static void LogActorDecisionThrottled(string message)
+    {
+        var now = Environment.TickCount64;
+        var previous = Interlocked.Read(ref _lastActorDiagnostic);
+        if (now - previous < 2000 || Interlocked.CompareExchange(ref _lastActorDiagnostic, now, previous) != previous)
+            return;
+        Log.Debug($"[Pickup] {message}");
     }
 
     private static bool Condition(
@@ -337,6 +382,6 @@ public class PickupManager
     public static void Stop()
     {
         RunningPlayerPickup = false;
-        RunningAbilityPetPickup = false;
+        Interlocked.Increment(ref _abilityPetRunGeneration);
     }
 }
