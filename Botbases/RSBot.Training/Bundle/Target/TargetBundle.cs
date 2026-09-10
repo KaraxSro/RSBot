@@ -95,7 +95,7 @@ internal class TargetBundle : IBundle
         if (
             attacker != null
             && SpawnManager.TryGetEntity<SpawnedMonster>(Game.SelectedEntity.UniqueId, out var selectedMonster)
-            && GetMonsterStrengthPriority(attacker.Rarity) < GetMonsterStrengthPriority(selectedMonster.Rarity)
+            && IsHigherTargetPriority(attacker, selectedMonster)
         )
         {
             Log.Debug("[TargetBundle] Found a weaker attacking mob, switching target!");
@@ -144,6 +144,7 @@ internal class TargetBundle : IBundle
         return entities
             .Where(entity => !IsBlacklisted(entity.UniqueId))
             .OrderBy(e => GetMonsterStrengthPriority(e.Rarity))
+            .ThenBy(GetHealthPriority)
             .ThenBy(e => e.Record.Level)
             .ThenBy(e => e.Position.DistanceToPlayer())
             .FirstOrDefault();
@@ -175,6 +176,7 @@ internal class TargetBundle : IBundle
 
         return attackers
             .OrderBy(monster => GetMonsterStrengthPriority(monster.Rarity))
+            .ThenBy(GetHealthPriority)
             .ThenBy(monster => monster.Record.Level)
             .ThenBy(monster => monster.DistanceToPlayer)
             .FirstOrDefault();
@@ -236,8 +238,26 @@ internal class TargetBundle : IBundle
         return entities
             .OrderByDescending(m => m.AttackingPlayer)
             .ThenByDescending(m => Bundles.Avoidance.PreferMonster(m.Rarity))
+            .ThenBy(m => GetMonsterStrengthPriority(m.Rarity))
+            .ThenBy(GetHealthPriority)
             .ThenBy(m => m.Movement.Source.DistanceTo(Game.Player.Movement.Source))
             .FirstOrDefault(m => !m.IsBehindObstacle);
+    }
+
+    private static bool IsHigherTargetPriority(SpawnedMonster candidate, SpawnedMonster current)
+    {
+        var candidatePriority = GetMonsterStrengthPriority(candidate.Rarity);
+        var currentPriority = GetMonsterStrengthPriority(current.Rarity);
+
+        if (candidatePriority != currentPriority)
+            return candidatePriority < currentPriority;
+
+        return GetHealthPriority(candidate) < GetHealthPriority(current);
+    }
+
+    private static int GetHealthPriority(SpawnedMonster monster)
+    {
+        return monster.HasHealth && monster.Health > 0 ? monster.Health : int.MaxValue;
     }
 
     /// <summary>
