@@ -11,9 +11,23 @@ using RSBot.Core.Objects.Spawn;
 
 namespace RSBot.Core.Components;
 
+public enum CombatActionType
+{
+    None,
+    Skill,
+    BasicAttack,
+    RecurringBasicAttack,
+    Cancelling,
+}
+
 public static class SkillManager
 {
     private const int CAST_REJECTION_BACKOFF = 750;
+    private const int CAST_STALL_TIMEOUT = 1_500;
+    private const float CAST_PROGRESS_DISTANCE = 0.5f;
+    private const int CANCEL_SETTLE_INTERVAL = 600;
+    private const int CANCEL_COLLISION_WINDOW = 2_000;
+    private const int COMBAT_SKILL_QUEUE_LEAD_TIME = 300;
 
     /// <summary>
     ///     Get the skill using index
@@ -26,8 +40,25 @@ public static class SkillManager
     public static uint LastCastedSkillId;
 
     private static volatile uint _pendingSkillId;
+    private static volatile uint _pendingSkillTargetId;
     private static volatile int _pendingSkillTick;
     private static volatile int _pendingSkillTimeout;
+    private static volatile int _pendingSkillLastProgressTick;
+    private static volatile float _pendingSkillLastDistance;
+    private static volatile bool _pendingSkillAccepted;
+    private static volatile uint _pendingImbueSkillId;
+    private static volatile int _pendingImbueTick;
+    private static volatile int _pendingImbueTimeout;
+    private static volatile bool _lastRequestWasImbue;
+    private static volatile CombatActionType _currentCombatAction;
+    private static volatile int _cancelSettleUntilTick;
+    private static volatile int _lastCancelTick;
+    private static volatile uint _retryCombatSkillId;
+    private static volatile uint _retryCombatTargetId;
+    private static volatile uint _queuedCombatSkillId;
+    private static volatile uint _queuedCombatTargetId;
+    private static volatile int _currentCombatSkillStartedTick;
+    private static volatile int _currentCombatSkillDuration;
 
     /// <summary>
     ///     Basic skills
@@ -79,7 +110,101 @@ public static class SkillManager
     /// <summary>
     ///     Is the last action basic skill (Auto attack) <c>true</c>; otherwise <c>false</c>
     /// </summary>
-    public static bool IsLastCastedBasic => _baseSkills.Contains(LastCastedSkillId);
+    public static bool IsLastCastedBasic => IsBasicSkill(LastCastedSkillId);
+
+    /// <summary>
+    ///     Gets the current combat action independently from overlay buffs such as imbue.
+    /// </summary>
+    public static CombatActionType CurrentCombatAction => _currentCombatAction;
+
+    /// <summary>
+    ///     Gets whether the current action can be interrupted for a configured combat skill.
+    /// </summary>
+    public static bool IsCurrentActionBasic =>
+        _currentCombatAction is CombatActionType.BasicAttack or CombatActionType.RecurringBasicAttack
+        || (_currentCombatAction == CombatActionType.None && IsLastCastedBasic);
+
+    /// <summary>
+    ///     Gets whether the supplied skill is one of the client's basic attacks.
+    /// </summary>
+    public static bool IsBasicSkill(uint skillId) => _baseSkills?.Contains(skillId) == true;
+
+    /// <summary>
+    ///     Gets the skill request currently waiting for a server response.
+    /// </summary>
+    public static uint PendingSkillId => _pendingSkillId;
+
+    /// <summary>
+    ///     Gets the entity targeted by the pending skill request, or zero for a non-targeted skill.
+    /// </summary>
+    public static uint PendingSkillTargetId => _pendingSkillTargetId;
+
+    public static uint RetryCombatSkillId => _retryCombatSkillId;
+
+    public static uint RetryCombatTargetId => _retryCombatTargetId;
+
+    public static uint QueuedCombatSkillId => _queuedCombatSkillId;
+
+    public static uint QueuedCombatTargetId => _queuedCombatTargetId;
+
+    public static int CurrentCombatSkillRemainingMilliseconds =>
+        _currentCombatSkillDuration <= 0
+            ? int.MaxValue
+            : Math.Max(
+                0,
+                _currentCombatSkillDuration
+                    - (Kernel.TickCount - _currentCombatSkillStartedTick)
+            );
+
+    /// <summary>
+    ///     Gets how long the current skill request has been pending.
+    /// </summary>
+    public static int PendingSkillElapsedMilliseconds =>
+        _pendingSkillId == 0 ? 0 : Math.Max(0, Kernel.TickCount - _pendingSkillTick);
+
+    /// <summary>
+    ///     Gets the timeout assigned to the current skill request.
+    /// </summary>
+    public static int PendingSkillTimeoutMilliseconds => _pendingSkillTimeout;
+
+    /// <summary>
+    ///     Gets whether action-end packets from a cancelled basic attack are still settling.
+    /// </summary>
+    public static bool IsCancellationSettling
+    {
+        get
+        {
+            if (_currentCombatAction == CombatActionType.Cancelling)
+                return true;
+
+            var settleUntil = _cancelSettleUntilTick;
+            if (settleUntil == 0)
+                return false;
+
+            if (unchecked(settleUntil - Kernel.TickCount) > 0)
+                return true;
+
+            _cancelSettleUntilTick = 0;
+            return false;
+        }
+    }
+
+    public static uint PendingImbueSkillId => IsImbuePending ? _pendingImbueSkillId : 0;
+
+    public static bool IsImbuePending
+    {
+        get
+        {
+            if (_pendingImbueSkillId == 0)
+                return false;
+
+            if (Kernel.TickCount - _pendingImbueTick < _pendingImbueTimeout)
+                return true;
+
+            _pendingImbueSkillId = 0;
+            return false;
+        }
+    }
 
     /// <summary>
     ///     Gets whether a skill request is waiting for the server to accept or reject it.
@@ -88,14 +213,43 @@ public static class SkillManager
     {
         get
         {
-            if (_pendingSkillId == 0)
-                return false;
+            if (_pendingSkillId != 0)
+            {
+                var now = Kernel.TickCount;
+                if (_pendingSkillAccepted)
+                {
+                    if (now - _pendingSkillTick < _pendingSkillTimeout)
+                        return true;
 
-            if (Kernel.TickCount - _pendingSkillTick < _pendingSkillTimeout)
-                return true;
+                    ClearPendingSkill();
+                }
+                else if (!ValidatePendingTarget())
+                {
+                    ClearPendingSkill("target-changed");
+                    ClearCombatRetry();
+                }
+                else if (_pendingSkillTargetId != 0 && HasPendingCastProgress(now))
+                {
+                    return true;
+                }
+                else if (
+                    _pendingSkillTargetId != 0
+                    && now - _pendingSkillLastProgressTick >= CAST_STALL_TIMEOUT
+                )
+                {
+                    ClearPendingSkill("no-cast-progress", retryCombatSkill: true);
+                }
+                else if (now - _pendingSkillTick < _pendingSkillTimeout)
+                {
+                    return true;
+                }
+                else
+                {
+                    ClearPendingSkill("request-timeout", retryCombatSkill: true);
+                }
+            }
 
-            _pendingSkillId = 0;
-            return false;
+            return IsImbuePending;
         }
     }
 
@@ -111,6 +265,8 @@ public static class SkillManager
 
         EventManager.SubscribeEvent("OnLoadGameData", OnLoadGamedData);
         EventManager.SubscribeEvent("OnCastSkill", new Action<uint>(OnCastSkill));
+        EventManager.SubscribeEvent("OnLoadCharacter", ResetCombatState);
+        EventManager.SubscribeEvent("OnAgentServerDisconnected", ResetCombatState);
 
         Log.Debug($"Initialized [SkillManager] for [{Skills.Count}] different mob rarities!");
     }
@@ -118,6 +274,23 @@ public static class SkillManager
     private static void OnLoadGamedData()
     {
         _baseSkills = Game.ReferenceManager.GetBaseSkills();
+    }
+
+    private static void ResetCombatState()
+    {
+        LastCastedSkillId = 0;
+        _pendingSkillId = 0;
+        _pendingSkillTargetId = 0;
+        _pendingSkillAccepted = false;
+        _pendingImbueSkillId = 0;
+        _lastRequestWasImbue = false;
+        _currentCombatAction = CombatActionType.None;
+        _cancelSettleUntilTick = 0;
+        _lastCancelTick = 0;
+        _currentCombatSkillStartedTick = 0;
+        _currentCombatSkillDuration = 0;
+        ClearCombatRetry();
+        ClearQueuedCombatSkill();
     }
 
     /// <summary>
@@ -132,6 +305,18 @@ public static class SkillManager
             return;
 
         LastCastedSkillId = skillId;
+        if (IsBasicSkill(skillId))
+        {
+            _currentCombatAction = CombatActionType.BasicAttack;
+            _currentCombatSkillStartedTick = 0;
+            _currentCombatSkillDuration = 0;
+            return;
+        }
+
+        _currentCombatAction = CombatActionType.Skill;
+        var skill = Game.Player.Skills.GetSkillInfoById(skillId);
+        _currentCombatSkillStartedTick = Kernel.TickCount;
+        _currentCombatSkillDuration = GetTotalActionDuration(skill);
     }
 
     /// <summary>
@@ -139,13 +324,24 @@ public static class SkillManager
     /// </summary>
     public static void CompleteCastRequest(uint skillId)
     {
+        if (_pendingImbueSkillId == skillId)
+        {
+            // Keep the request guarded until the corresponding buff-add packet arrives.
+            _pendingImbueTick = Kernel.TickCount;
+            _pendingImbueTimeout = 1_500;
+        }
+
         if (_pendingSkillId == skillId)
         {
             // Keep a short guard after acceptance so the action-state packet can arrive
             // before the next training tick considers another skill.
             _pendingSkillTick = Kernel.TickCount;
             _pendingSkillTimeout = 250;
+            _pendingSkillAccepted = true;
         }
+
+        if (_retryCombatSkillId == skillId)
+            ClearCombatRetry();
     }
 
     /// <summary>
@@ -153,29 +349,294 @@ public static class SkillManager
     /// </summary>
     public static void RejectCastRequest()
     {
-        var rejectedSkillId = _pendingSkillId;
-        _pendingSkillId = 0;
+        uint rejectedSkillId;
+        if (_lastRequestWasImbue && _pendingImbueSkillId != 0)
+        {
+            rejectedSkillId = _pendingImbueSkillId;
+            _pendingImbueSkillId = 0;
+        }
+        else
+        {
+            rejectedSkillId = _pendingSkillId;
+            ClearPendingSkill();
+        }
 
         if (rejectedSkillId == 0)
             return;
 
+        if (_retryCombatSkillId == rejectedSkillId)
+            ClearCombatRetry();
+
         var skill = Game.Player?.Skills?.GetSkillInfoById(rejectedSkillId);
         skill ??= Buffs?.Find(candidate => candidate.Id == rejectedSkillId);
+        skill ??= ImbueSkill?.Id == rejectedSkillId ? ImbueSkill : null;
         skill?.DeferRetry(CAST_REJECTION_BACKOFF);
     }
 
-    private static void BeginCastRequest(SkillInfo skill)
+    private static void BeginCastRequest(
+        SkillInfo skill,
+        uint targetId = 0,
+        double targetDistance = 0
+    )
     {
+        if (
+            targetId != 0
+            && _currentCombatAction == CombatActionType.RecurringBasicAttack
+            && !IsCancellationSettling
+        )
+        {
+            // This request intentionally replaces the server's recurring basic attack;
+            // it is unrelated to any older cancel tail and must not be invalidated by it.
+            _lastCancelTick = 0;
+        }
+
+        _lastRequestWasImbue = false;
         _pendingSkillId = skill.Id;
+        _pendingSkillTargetId = targetId;
         _pendingSkillTick = Kernel.TickCount;
+        _pendingSkillLastProgressTick = _pendingSkillTick;
+        _pendingSkillLastDistance = (float)targetDistance;
+        _pendingSkillAccepted = false;
+
+        var movementDuration = 0;
+        var range = skill.Record.Action_Range / 10d;
+        if (targetDistance > range && Game.Player.ActualSpeed > 0)
+            movementDuration = (int)((targetDistance - range) / Game.Player.ActualSpeed * 10_000d);
+
         _pendingSkillTimeout = Math.Clamp(
             skill.Record.Action_PreparingTime
                 + skill.Record.Action_CastingTime
                 + skill.Record.Action_ActionDuration
+                + movementDuration
                 + 1_000,
             1_000,
-            10_000
+            15_000
         );
+    }
+
+    private static bool ValidatePendingTarget()
+    {
+        if (_pendingSkillTargetId == 0)
+            return true;
+
+        var target = Game.SelectedEntity;
+        return target != null
+            && target.UniqueId == _pendingSkillTargetId
+            && target.State.LifeState == LifeState.Alive;
+    }
+
+    private static bool HasPendingCastProgress(int now)
+    {
+        if (_pendingSkillTargetId == 0)
+            return false;
+
+        var target = Game.SelectedEntity;
+        if (target == null || target.UniqueId != _pendingSkillTargetId)
+            return false;
+
+        var distance = target.DistanceToPlayer;
+        if (_pendingSkillLastDistance - distance < CAST_PROGRESS_DISTANCE)
+            return false;
+
+        _pendingSkillLastDistance = (float)distance;
+        _pendingSkillLastProgressTick = now;
+        return true;
+    }
+
+    private static void ClearPendingSkill(string reason = null, bool retryCombatSkill = false)
+    {
+        var skillId = _pendingSkillId;
+        var targetId = _pendingSkillTargetId;
+        var elapsed = skillId == 0 ? 0 : Math.Max(0, Kernel.TickCount - _pendingSkillTick);
+
+        if (retryCombatSkill && skillId != 0 && targetId != 0)
+        {
+            _retryCombatSkillId = skillId;
+            _retryCombatTargetId = targetId;
+        }
+
+        _pendingSkillId = 0;
+        _pendingSkillTargetId = 0;
+        _pendingSkillTick = 0;
+        _pendingSkillTimeout = 0;
+        _pendingSkillLastProgressTick = 0;
+        _pendingSkillLastDistance = 0;
+        _pendingSkillAccepted = false;
+
+        if (reason != null && skillId != 0)
+        {
+            Log.Append(
+                LogLevel.Debug,
+                $"PENDING_CLEARED reason={reason} skill={skillId} target={targetId} elapsed={elapsed}ms",
+                "CombatTrace"
+            );
+        }
+    }
+
+    private static void ClearCombatRetry()
+    {
+        _retryCombatSkillId = 0;
+        _retryCombatTargetId = 0;
+    }
+
+    /// <summary>
+    ///     Buffers the next attack skill while the current attack animation is still running.
+    /// </summary>
+    public static bool QueueNextCombatSkill(SkillInfo skill, uint targetId)
+    {
+        if (skill == null || targetId == 0)
+            return false;
+
+        if (_queuedCombatSkillId == skill.Id && _queuedCombatTargetId == targetId)
+            return true;
+
+        _queuedCombatSkillId = skill.Id;
+        _queuedCombatTargetId = targetId;
+
+        Log.Append(
+            LogLevel.Debug,
+            $"SKILL_QUEUED skill={skill.Record.GetRealName()}({skill.Id}) target={targetId}",
+            "CombatTrace"
+        );
+        return true;
+    }
+
+    private static void ClearQueuedCombatSkill()
+    {
+        _queuedCombatSkillId = 0;
+        _queuedCombatTargetId = 0;
+    }
+
+    private static bool TryDispatchQueuedCombatSkill(string reason)
+    {
+        var skillId = _queuedCombatSkillId;
+        var targetId = _queuedCombatTargetId;
+        if (skillId == 0 || targetId == 0)
+            return false;
+
+        var target = Game.SelectedEntity;
+        var skill = target?.UniqueId == targetId
+            ? GetCurrentAttackSkills().FirstOrDefault(candidate => candidate.Id == skillId)
+            : null;
+
+        ClearQueuedCombatSkill();
+
+        if (
+            target == null
+            || target.UniqueId != targetId
+            || target.State.LifeState != LifeState.Alive
+            || skill == null
+            || !skill.CanBeCasted
+            || !CheckSkillRequired(skill.Record)
+        )
+            return false;
+
+        Log.Append(
+            LogLevel.Debug,
+            $"SKILL_QUEUE_DISPATCH reason={reason} skill={skill.Record.GetRealName()}({skill.Id}) target={targetId}",
+            "CombatTrace"
+        );
+
+        return CastSkill(skill, targetId);
+    }
+
+    /// <summary>
+    ///     Sends a buffered attack shortly before the current animation finishes, so it
+    ///     reaches the server before the automatic recurring basic attack is scheduled.
+    /// </summary>
+    public static bool TryDispatchQueuedCombatSkillEarly()
+    {
+        if (
+            _currentCombatAction != CombatActionType.Skill
+            || _queuedCombatSkillId == 0
+            || CurrentCombatSkillRemainingMilliseconds > COMBAT_SKILL_QUEUE_LEAD_TIME
+        )
+            return false;
+
+        return TryDispatchQueuedCombatSkill(
+            $"action-ending remaining={CurrentCombatSkillRemainingMilliseconds}ms"
+        );
+    }
+
+    private static int GetTotalActionDuration(SkillInfo skill)
+    {
+        var record = skill?.Record;
+        var duration = 0;
+        var visited = new HashSet<uint>();
+
+        while (record != null && visited.Add(record.ID))
+        {
+            duration +=
+                record.Action_PreparingTime
+                + record.Action_CastingTime
+                + record.Action_ActionDuration;
+            record = record.Basic_ChainCode == 0
+                ? null
+                : Game.ReferenceManager.GetRefSkill(record.Basic_ChainCode);
+        }
+
+        return duration;
+    }
+
+    private static bool BeginImbueRequest(SkillInfo skill)
+    {
+        if (IsImbuePending)
+            return false;
+
+        _lastRequestWasImbue = true;
+        _pendingImbueSkillId = skill.Id;
+        _pendingImbueTick = Kernel.TickCount;
+        _pendingImbueTimeout = Math.Clamp(
+            skill.Record.Action_PreparingTime
+                + skill.Record.Action_CastingTime
+                + skill.Record.Action_ActionDuration
+                + 2_000,
+            2_000,
+            5_000
+        );
+        return true;
+    }
+
+    public static void CompleteImbueRequest(uint skillId)
+    {
+        if (_pendingImbueSkillId == skillId)
+            _pendingImbueSkillId = 0;
+    }
+
+    public static void UpdateActionState(byte state, byte recurring)
+    {
+        if (recurring == 0)
+        {
+            var now = Kernel.TickCount;
+            if (
+                _pendingSkillId != 0
+                && !_pendingSkillAccepted
+                && _pendingSkillTargetId != 0
+                && _lastCancelTick != 0
+                && now - _lastCancelTick < CANCEL_COLLISION_WINDOW
+            )
+            {
+                ClearPendingSkill("cancel-tail-action-end", retryCombatSkill: true);
+                _cancelSettleUntilTick = unchecked(now + CANCEL_SETTLE_INTERVAL);
+            }
+
+            if (_currentCombatAction == CombatActionType.Cancelling || IsCancellationSettling)
+                _cancelSettleUntilTick = unchecked(now + CANCEL_SETTLE_INTERVAL);
+
+            _currentCombatAction = CombatActionType.None;
+            TryDispatchQueuedCombatSkill("action-ended");
+            return;
+        }
+
+        if (state is 0x02 or 0x03)
+        {
+            _currentCombatAction = CombatActionType.RecurringBasicAttack;
+            TryDispatchQueuedCombatSkill("recurring-basic-started");
+            return;
+        }
+
+        if (_pendingSkillId != 0)
+            _currentCombatAction = CombatActionType.Skill;
     }
 
     /// <summary>
@@ -206,6 +667,26 @@ public static class SkillManager
         if (entity is SpawnedMonster monster)
             if (Skills[monster.Rarity].Count > 0)
                 rarity = monster.Rarity;
+
+        if (_retryCombatSkillId != 0)
+        {
+            if (_retryCombatTargetId != entity.UniqueId)
+            {
+                ClearCombatRetry();
+            }
+            else
+            {
+                var retrySkill = Skills[rarity].Find(skill => skill.Id == _retryCombatSkillId);
+                if (retrySkill == null)
+                {
+                    ClearCombatRetry();
+                }
+                else if (retrySkill.CanBeCasted)
+                {
+                    return retrySkill;
+                }
+            }
+        }
 
         var distance = Game.Player.Movement.Source.DistanceTo(entity.Movement.Source);
 
@@ -269,6 +750,50 @@ public static class SkillManager
         }
 
         return closestSkill;
+    }
+
+    /// <summary>
+    ///     Gets the configured attack skills used for the currently selected target.
+    /// </summary>
+    public static IReadOnlyList<SkillInfo> GetCurrentAttackSkills()
+    {
+        var entity = Game.SelectedEntity;
+        var rarity = MonsterRarity.General;
+
+        if (entity is SpawnedMonster monster && Skills[monster.Rarity].Count > 0)
+            rarity = monster.Rarity;
+
+        return Skills[rarity];
+    }
+
+    /// <summary>
+    ///     Describes why a configured attack skill cannot currently be used.
+    /// </summary>
+    public static string GetCastAvailability(SkillInfo skill)
+    {
+        if (skill == null)
+            return "missing";
+
+        var record = skill.Record;
+        if (record == null)
+            return "missing-reference";
+
+        if (skill.RetryRemainingMilliseconds > 0)
+            return $"retry-backoff:{skill.RetryRemainingMilliseconds}ms";
+
+        if (skill.CooldownRemainingMilliseconds > 0)
+            return $"cooldown:{skill.CooldownRemainingMilliseconds}ms";
+
+        if (Game.Player.Mana < record.Consume_MP)
+            return $"mana:{Game.Player.Mana}/{record.Consume_MP}";
+
+        if (skill.CanNotBeCasted)
+            return $"active-duration:{skill.RemainingMilliseconds}ms";
+
+        if (!CheckSkillRequired(record))
+            return "weapon-requirement";
+
+        return "ready";
     }
 
     /// <summary>
@@ -350,7 +875,7 @@ public static class SkillManager
             $"Skill Attacking to: {targetId} State: {entity.State.LifeState} Health: {entity.Health} HasHealth: {entity.HasHealth} Dst: {Math.Round(entity.DistanceToPlayer, 1)}"
         );
 
-        BeginCastRequest(skill);
+        BeginCastRequest(skill, targetId, entity.DistanceToPlayer);
         PacketManager.SendPacket(packet, PacketDestination.Server);
 
         return true;
@@ -472,6 +997,10 @@ public static class SkillManager
         if (!CheckSkillRequired(skill.Record))
             return;
 
+        var isImbue = ImbueSkill?.Id == skill.Id;
+        if (isImbue && !BeginImbueRequest(skill))
+            return;
+
         Log.Notify($"Casting skill (self-buff) [{skill.Record.GetRealName()}]");
 
         var packet = new Packet(0x7074);
@@ -513,7 +1042,8 @@ public static class SkillManager
             0xB074
         );
 
-        BeginCastRequest(skill);
+        if (!isImbue)
+            BeginCastRequest(skill);
         PacketManager.SendPacket(packet, PacketDestination.Server, asyncCallback, callback);
 
         if (awaitBuffResponse)
@@ -611,6 +1141,7 @@ public static class SkillManager
             $"Normal Attacking to: {entity.UniqueId} State: {entity.State.LifeState} Health: {entity.Health} HasHealth: {entity.HasHealth} Dst: {Math.Round(entity.DistanceToPlayer, 1)}"
         );
 
+        _currentCombatAction = CombatActionType.BasicAttack;
         PacketManager.SendPacket(packet, PacketDestination.Server);
 
         return true;
@@ -663,6 +1194,11 @@ public static class SkillManager
     /// <returns></returns>
     public static bool CancelAction()
     {
+        var startedTick = Kernel.TickCount;
+        var previousAction = _currentCombatAction;
+        _currentCombatAction = CombatActionType.Cancelling;
+        _lastCancelTick = startedTick;
+        _cancelSettleUntilTick = unchecked(startedTick + CANCEL_SETTLE_INTERVAL);
         var packet = new Packet(0x7074);
         packet.WriteByte(0x02); //Cancel
 
@@ -678,6 +1214,23 @@ public static class SkillManager
 
         PacketManager.SendPacket(packet, PacketDestination.Server, callback);
         callback.AwaitResponse();
+
+        if (!callback.IsCompleted && _currentCombatAction == CombatActionType.Cancelling)
+        {
+            _currentCombatAction = previousAction;
+            _cancelSettleUntilTick = 0;
+        }
+        else if (callback.IsCompleted)
+        {
+            _cancelSettleUntilTick = unchecked(Kernel.TickCount + CANCEL_SETTLE_INTERVAL);
+        }
+
+        Log.Append(
+            LogLevel.Debug,
+            $"CANCEL_RESULT completed={callback.IsCompleted} elapsed={Kernel.TickCount - startedTick}ms "
+                + $"inAction={Game.Player.InAction} lastSkill={LastCastedSkillId} lastIsBasic={IsLastCastedBasic}",
+            "CombatTrace"
+        );
 
         return callback.IsCompleted;
     }

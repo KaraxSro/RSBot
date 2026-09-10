@@ -30,6 +30,7 @@ public class PickupManager
     private static int _runningAbilityPetPickup;
     private static int _abilityPetRunGeneration;
     private static long _lastActorDiagnostic;
+    private static long _lastActorWarning;
     public static bool RunningAbilityPetPickup => Volatile.Read(ref _runningAbilityPetPickup) != 0;
 
     /// <summary>
@@ -183,6 +184,8 @@ public class PickupManager
         var generation = Volatile.Read(ref _abilityPetRunGeneration);
         var pet = Game.Player?.AbilityPet;
         var petUniqueId = pet?.UniqueId ?? 0;
+        var attemptedCount = 0;
+        var resolvedCount = 0;
 
         try
         {
@@ -191,10 +194,11 @@ public class PickupManager
                 LogActorDecisionThrottled("AbilityPet pickup aborted: setting disabled or no active pet");
                 return;
             }
-            Log.Debug($"[Pickup] AbilityPet run started; pet={petUniqueId}; center={centerPosition}; radius={radius}");
             if (pet.Inventory?.Full == true)
             {
-                Log.Warn($"[Pickup] AbilityPet inventory is full; pet={petUniqueId}; character fallback is disabled while pet-only mode is active.");
+                LogActorWarningThrottled(
+                    $"AbilityPet inventory is full; pet={petUniqueId}; character fallback is disabled while pet-only mode is active."
+                );
                 return;
             }
             if (
@@ -217,20 +221,25 @@ public class PickupManager
                 var activePet = Game.Player?.AbilityPet;
                 if (activePet == null || activePet.UniqueId != petUniqueId)
                 {
-                    Log.Warn($"[Pickup] AbilityPet run aborted: pet {petUniqueId} disappeared or was replaced; no player fallback.");
+                    LogActorWarningThrottled(
+                        $"AbilityPet run aborted: pet {petUniqueId} disappeared or was replaced; no player fallback."
+                    );
                     return;
                 }
                 if (activePet.Inventory?.Full == true)
                 {
-                    Log.Warn($"[Pickup] AbilityPet run aborted: inventory full for pet {petUniqueId}; no player fallback.");
+                    LogActorWarningThrottled(
+                        $"AbilityPet run aborted: inventory full for pet {petUniqueId}; no player fallback."
+                    );
                     return;
                 }
 
                 if (item.Record.IsSpecialtyGoodBox && Game.Player.Job2SpecialtyBag.Full)
                     continue;
 
-                Log.Debug($"[Pickup] Actor=AbilityPet; pet={petUniqueId}; item={item.UniqueId}/{item.Record.CodeName}");
-                await activePet.PickupAsync(item.UniqueId);
+                attemptedCount++;
+                if (await activePet.PickupAsync(item.UniqueId))
+                    resolvedCount++;
                 await Task.Yield();
             }
         }
@@ -241,7 +250,12 @@ public class PickupManager
         finally
         {
             Interlocked.Exchange(ref _runningAbilityPetPickup, 0);
-            Log.Debug($"[Pickup] AbilityPet run completed; pet={petUniqueId}");
+            if (resolvedCount > 0)
+            {
+                Log.Debug(
+                    $"[Pickup] AbilityPet run completed; pet={petUniqueId}; resolved={resolvedCount}; attempted={attemptedCount}"
+                );
+            }
         }
     }
 
@@ -252,6 +266,15 @@ public class PickupManager
         if (now - previous < 2000 || Interlocked.CompareExchange(ref _lastActorDiagnostic, now, previous) != previous)
             return;
         Log.Debug($"[Pickup] {message}");
+    }
+
+    private static void LogActorWarningThrottled(string message)
+    {
+        var now = Environment.TickCount64;
+        var previous = Interlocked.Read(ref _lastActorWarning);
+        if (now - previous < 5000 || Interlocked.CompareExchange(ref _lastActorWarning, now, previous) != previous)
+            return;
+        Log.Warn($"[Pickup] {message}");
     }
 
     private static bool Condition(

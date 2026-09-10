@@ -2,6 +2,7 @@
 using RSBot.Core.Event;
 using RSBot.Core.Objects;
 using RSBot.Core.Objects.Spawn;
+using System;
 using System.Diagnostics;
 
 namespace RSBot.Core.Network.Handler.Agent.Action;
@@ -33,10 +34,19 @@ internal class ActionSkillCastResponse : IPacketHandler
     /// <param name="packet">The packet.</param>
     public void Invoke(Packet packet)
     {
+        var rawPacket = Convert.ToHexString(packet.GetBytes());
         var result = packet.ReadByte();
         if (result != 0x01)
         {
             var errorCode = packet.ReadByte();
+            var pendingSkillId = SkillManager.PendingSkillId;
+
+            Log.Append(
+                LogLevel.Debug,
+                $"CAST_REJECTED client={Game.ClientType} result=0x{result:X2} error=0x{errorCode:X2} "
+                    + $"pending={pendingSkillId} imbuePending={SkillManager.PendingImbueSkillId} raw={rawPacket}",
+                "CombatTrace"
+            );
 
             SkillManager.RejectCastRequest();
 
@@ -114,16 +124,28 @@ internal class ActionSkillCastResponse : IPacketHandler
             action.Flag = (ActionStateFlag)packet.ReadByte();
         }
 
+        var knownPlayerSkill = Game.Player.Skills.GetSkillInfoById(action.SkillId);
+        knownPlayerSkill ??= SkillManager.Buffs.Find(candidate => candidate.Id == action.SkillId);
+        var skillIsBasic = SkillManager.IsBasicSkill(action.SkillId);
+        if (action.PlayerIsExecutor || knownPlayerSkill != null || skillIsBasic)
+        {
+            var skillName = knownPlayerSkill?.Record?.GetRealName() ?? "unknown";
+            Log.Append(
+                LogLevel.Debug,
+                $"CAST_ACCEPTED client={Game.ClientType} code=0x{action.Code:X2} "
+                    + $"skill={skillName}({action.SkillId}) skillIsBasic={skillIsBasic} "
+                    + $"executor={action.ExecutorId} expectedPlayer={Game.Player.UniqueId} playerExecutor={action.PlayerIsExecutor} "
+                    + $"action={action.Id} target={action.TargetId} flag={action.Flag} pending={SkillManager.PendingSkillId} raw={rawPacket}",
+                "CombatTrace"
+            );
+        }
+
         /*if (Game.ClientType >= GameClientType.Chinese)
             packet.ReadByte();
 
         action.Flag = (ActionStateFlag)packet.ReadByte();*/
-        action.ReadPacket(packet);
-
         if (action.PlayerIsExecutor)
         {
-            //Game.Player.StopMoving();
-
             var skillInfo = Game.Player.Skills.GetSkillInfoById(action.SkillId);
             if (skillInfo == null)
                 skillInfo = SkillManager.Buffs.Find(p => p.Id == action.SkillId);
@@ -132,9 +154,12 @@ internal class ActionSkillCastResponse : IPacketHandler
             SkillManager.CompleteCastRequest(action.SkillId);
 
             EventManager.FireEvent("OnCastSkill", action.SkillId);
-
-            return;
         }
+
+        action.ReadPacket(packet);
+
+        if (action.PlayerIsExecutor)
+            return;
 
         if (!action.TryGetExecutor<SpawnedBionic>(out var executor))
             return;
