@@ -203,6 +203,11 @@ public class SkillInfo
     }
 
     /// <summary>
+    ///     Remaining client-side retry delay after the server rejected this skill.
+    /// </summary>
+    public int RetryRemainingMilliseconds => Math.Max(0, _retryAfterTick - Kernel.TickCount);
+
+    /// <summary>
     ///     Remaining cooldown time formatted mm:ss
     /// </summary>
     public string CooldownFormatted

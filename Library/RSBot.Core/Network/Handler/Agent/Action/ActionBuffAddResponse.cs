@@ -22,6 +22,7 @@ internal class ActionBuffAddResponse : IPacketHandler
         var buff = new SkillInfo(skillId, token);
         if (targetId == Game.Player.UniqueId)
         {
+            SkillManager.CompleteImbueRequest(skillId);
             var playerBuff = Game.Player.Skills.GetSkillInfoById(buff.Id);
             if (playerBuff != null)
             {

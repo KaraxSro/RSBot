@@ -84,7 +84,7 @@ public struct Area
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsInSight(SpawnedEntity entity)
     {
-        return Position.DistanceTo(entity.Movement.Source) <= Radius;
+        return entity != null && Position.DistanceTo(entity.Movement.Source) <= Radius;
     }
 
     /// <summary>
