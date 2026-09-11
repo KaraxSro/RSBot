@@ -36,6 +36,7 @@ internal class GatewayLoginResponse : IPacketHandler
         if (packet.ReadByte() == 0x01)
         {
             AutoLogin.RecordState("Gateway login accepted", LogLevel.Notify);
+            AgentLoginWatchdog.ObserveGatewayLoginAccepted();
             Log.NotifyLang("AuthGetewaySuccess");
             AutoLogin.Pending = false;
             View.PendingWindow?.Hide();

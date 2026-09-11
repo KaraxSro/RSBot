@@ -52,6 +52,7 @@ internal sealed class MagicPopBot
     private int _lossCount;
     private int _purchasedCardCount;
     private uint? _startingSilk;
+    private bool _restoreClientAfterStop;
 
     public MagicPopBot()
     {
@@ -89,6 +90,7 @@ internal sealed class MagicPopBot
             _returnTeleportSettleUntilUtc = DateTime.MinValue;
             _nextPurchaseUtc = DateTime.MinValue;
             _nextRollUtc = DateTime.MinValue;
+            _restoreClientAfterStop = false;
             ReconcilePendingRoll();
             SetState(MagicPopRunState.ReturningToHotan);
         }
@@ -99,8 +101,13 @@ internal sealed class MagicPopBot
 
     public void Stop()
     {
+        var shouldSortInventory = false;
+        var shouldRestoreClient = false;
         lock (_syncRoot)
         {
+            shouldSortInventory = _state != MagicPopRunState.Stopped;
+            shouldRestoreClient = _restoreClientAfterStop;
+            _restoreClientAfterStop = false;
             ScriptManager.Stop();
             _targets.Clear();
             _roll = null;
@@ -116,6 +123,9 @@ internal sealed class MagicPopBot
             _fault = null;
             SetState(MagicPopRunState.Stopped);
         }
+
+        if (shouldSortInventory || shouldRestoreClient)
+            _ = Task.Run(() => CompletePostStopWork(shouldSortInventory, shouldRestoreClient));
     }
 
     public void Tick()
@@ -206,9 +216,15 @@ internal sealed class MagicPopBot
 
         if (!Game.Clientless)
         {
+            _restoreClientAfterStop = ClientManager.IsRunning;
             ClientlessManager.GoClientless();
+            ClientManager.Kill();
             Log.Notify("[Magic POP] Switched to clientless mode before Item Mall and Magic POP operations.");
-            Container.AppendDiagnostic("Hotan return point confirmed; switched to clientless mode.");
+            Container.AppendDiagnostic(
+                _restoreClientAfterStop
+                    ? "Hotan return point confirmed; switched to clientless mode and closed the game client."
+                    : "Hotan return point confirmed; switched to clientless mode."
+            );
         }
         else
             Container.AppendDiagnostic("Hotan return point confirmed; already running clientless.");
@@ -533,6 +549,50 @@ internal sealed class MagicPopBot
             _atPotionShop = true;
         }
         SetState(_taskSuccessState);
+    }
+
+    private static void SortInventoryAfterStop()
+    {
+        var player = Game.Player;
+        var inventory = player?.Inventory;
+        if (inventory == null)
+        {
+            Container.AppendDiagnostic("Post-stop inventory sort skipped: character inventory is unavailable.");
+            return;
+        }
+
+        if (inventory.IsSorting || player.InAction)
+        {
+            Container.AppendDiagnostic("Post-stop inventory sort skipped: the inventory is busy or the character is in action.");
+            return;
+        }
+
+        try
+        {
+            Log.Notify("[Magic POP] Sorting the character inventory after bot stop.");
+            Container.AppendDiagnostic("Sorting inventory after bot stop.");
+            inventory.Sort();
+            Log.Notify("[Magic POP] Post-stop character inventory sort completed.");
+            Container.AppendDiagnostic("Post-stop inventory sort completed.");
+        }
+        catch (Exception exception)
+        {
+            Log.Error($"[Magic POP] Post-stop inventory sort failed: {exception.Message}");
+            Container.AppendDiagnostic($"Post-stop inventory sort failed: {exception.Message}");
+        }
+    }
+
+    private static void CompletePostStopWork(bool shouldSortInventory, bool shouldRestoreClient)
+    {
+        if (shouldSortInventory)
+            SortInventoryAfterStop();
+
+        if (!shouldRestoreClient)
+            return;
+
+        Log.Notify("[Magic POP] Requesting clientless disconnect and a new game client after bot stop.");
+        Container.AppendDiagnostic("Disconnecting clientless and starting a new game client after bot stop.");
+        EventManager.FireEvent("OnRequestClientRestart", "Magic POP stopped");
     }
 
     private static bool OpenMachine()

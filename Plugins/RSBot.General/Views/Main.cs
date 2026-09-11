@@ -21,6 +21,7 @@ namespace RSBot.General.Views;
 internal partial class Main : DoubleBufferedControl
 {
     private bool _clientVisible;
+    private bool _clientRestartInProgress;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="Main" /> class.
@@ -51,6 +52,7 @@ internal partial class Main : DoubleBufferedControl
         EventManager.SubscribeEvent("OnCharacterListReceived", OnCharacterListReceived);
         EventManager.SubscribeEvent("OnInitialized", OnInitialized);
         EventManager.SubscribeEvent("OnProfileChanged", OnProfileChanged);
+        EventManager.SubscribeEvent("OnRequestClientRestart", new Action<string>(OnRequestClientRestart));
     }
 
     private void OnProfileChanged()
@@ -64,6 +66,7 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private void OnGatewayServerDisconnected()
     {
+        AgentLoginWatchdog.Cancel("gateway server disconnected", false);
         AutoLogin.Pending = false;
         View.PendingWindow?.Hide();
         View.PendingWindow?.StopClientlessQueueTask();
@@ -156,6 +159,7 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private void OnCharacterListReceived()
     {
+        AgentLoginWatchdog.ObserveCharacterList();
         LoadAccounts();
     }
 
@@ -210,6 +214,7 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private async Task StartClientProcess(string reason = "manual")
     {
+        AgentLoginWatchdog.PrepareForClientLaunch(reason);
         btnStartClient.Enabled = false;
         Game.Start();
 
@@ -220,6 +225,46 @@ internal partial class Main : DoubleBufferedControl
             OnExitClient();
             Log.WarnLang("ClientStartingError");
             Log.Warn($"Client start failed. Launch ID: {ClientManager.CurrentLaunchId}; diagnostic log: {Log.CurrentFilePath}");
+        }
+    }
+
+    /// <summary>
+    /// Disconnects the current clientless session and starts a fresh client by
+    /// using the same operations as the existing Disconnect and Start Client buttons.
+    /// </summary>
+    private async void OnRequestClientRestart(string reason)
+    {
+        if (_clientRestartInProgress)
+        {
+            Log.Warn($"Client restart request ignored because another restart is already in progress; reason={reason}.");
+            return;
+        }
+
+        _clientRestartInProgress = true;
+        try
+        {
+            if (Game.Clientless)
+                DisconnectClientless();
+
+            if (ClientManager.IsRunning)
+            {
+                Log.Warn($"Client restart request ignored because a game client is already running; reason={reason}.");
+                return;
+            }
+
+            var userAuthenticated = await HandleRegionalAuth();
+            if (userAuthenticated)
+                await StartClientProcess(reason);
+            else
+                Log.Warn($"Client restart was not started because regional authentication failed; reason={reason}.");
+        }
+        catch (Exception exception)
+        {
+            Log.Error($"Client restart failed; reason={reason}; error={exception}");
+        }
+        finally
+        {
+            _clientRestartInProgress = false;
         }
     }
 
@@ -242,6 +287,7 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private void OnExitClient()
     {
+        AgentLoginWatchdog.Cancel("client process exited", false);
         Log.StatusLang("Ready");
         _clientVisible = false;
         btnStartClient.Text = LanguageManager.GetLang("Start") + " Client";
@@ -278,6 +324,7 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private async void OnEnterGame()
     {
+        AgentLoginWatchdog.ObserveEnterGame();
         if (!Game.Clientless)
         {
             btnClientHideShow.Enabled = true;
@@ -315,8 +362,7 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private void OnAgentServerConnected()
     {
-        //if (!Game.Clientless)
-        //    btnGoClientless.Enabled = true;
+        AgentLoginWatchdog.ObserveAgentServerConnected();
     }
 
     /// <summary>
@@ -324,6 +370,7 @@ internal partial class Main : DoubleBufferedControl
     /// </summary>
     private async void OnAgentServerDisconnected()
     {
+        AgentLoginWatchdog.Cancel("agent server disconnected", false);
         Kernel.Bot.Stop();
 
         if (ClientManager.IsIntentionalExit)
@@ -349,7 +396,7 @@ internal partial class Main : DoubleBufferedControl
             btnStartClient.Enabled = false;
             btnStartClientless.Enabled = false;
 
-            int delay = 10000;
+            int delay = 3000;
             if (GlobalConfig.Get("RSBot.General.EnableWaitAfterDC", false))
                 delay = GlobalConfig.Get<int>("RSBot.General.WaitAfterDC") * 60 * 1000;
 
@@ -586,6 +633,11 @@ internal partial class Main : DoubleBufferedControl
         if (result == DialogResult.No)
             return;
 
+        DisconnectClientless();
+    }
+
+    private void DisconnectClientless()
+    {
         Game.Clientless = false;
 
         btnStartClient.Enabled = true;

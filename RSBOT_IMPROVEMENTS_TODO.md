@@ -297,13 +297,13 @@ Observed behavior:
 
 Planned fix:
 
-- [ ] Start a correlated watchdog when the gateway login is accepted and/or the agentserver connection is established.
-- [ ] Treat `Agent login response received`, character-list receipt, and successful character entry as distinct, timestamped progress checkpoints.
-- [ ] If no agent-login response or character list arrives within a bounded interval (initial proposal: 10–15 seconds), log the exact stalled phase and elapsed time.
-- [ ] Cancel the watchdog immediately when the expected checkpoint arrives, the user logs in manually, the connection closes, the client exits, or a newer login attempt supersedes it.
-- [ ] Recover from a confirmed stall by closing the stale connection/client and scheduling one controlled automatic reconnect instead of waiting indefinitely.
-- [ ] Use an attempt/generation identifier and a single-flight guard so a late packet from the old connection cannot cancel or advance the new attempt and multiple watchdogs cannot launch concurrent clients.
-- [ ] Add a bounded retry count and backoff; after exhaustion, stop retrying and leave one actionable log entry rather than creating a restart loop.
+- [x] Start a correlated watchdog when the gateway login is accepted and/or the agentserver connection is established.
+- [x] Treat `Agent login response received`, character-list receipt, and successful character entry as distinct, timestamped progress checkpoints.
+- [x] If no agent-login response or character list arrives within a bounded interval (implemented: 3 seconds per phase), log the exact stalled phase and elapsed time.
+- [x] Cancel the watchdog immediately when the expected checkpoint arrives, the user logs in manually, the connection closes, the client exits, or a newer login attempt supersedes it.
+- [x] Recover from a confirmed stall by closing the stale connection/client and scheduling one controlled automatic reconnect instead of waiting indefinitely.
+- [x] Use an attempt/generation identifier and a single-flight guard so a late packet from the old connection cannot cancel or advance the new attempt and multiple watchdogs cannot launch concurrent clients.
+- [x] Add a bounded retry count (implemented: ten watchdog recoveries); after exhaustion, stop retrying and leave one actionable log entry rather than creating a restart loop. A separate increasing backoff was not added because the existing reconnect path already applies its configured reconnect delay.
 - [ ] Record the outcome in one summary line: last completed phase, elapsed time, retry number, client PID/launch ID, and whether recovery was automatic.
 - [ ] Separately suppress or downgrade expected socket-abort error `995` when it belongs to a deliberately retired/closed connection, while retaining unexpected socket failures as errors.
 - [ ] Verify failed-first/successful-retry, normal first-attempt login, manual login, gateway queue, clientless login, deliberate client close, and late old-connection packet scenarios.

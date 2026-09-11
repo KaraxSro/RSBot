@@ -47,7 +47,7 @@ public class ClientlessManager
         if (!Game.Clientless)
             return;
 
-        int delay = 10000;
+        int delay = 3000;
         if (GlobalConfig.Get("RSBot.General.EnableWaitAfterDC", false))
             delay = GlobalConfig.Get<int>("RSBot.General.WaitAfterDC") * 60 * 1000;
 
