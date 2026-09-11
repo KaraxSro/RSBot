@@ -110,6 +110,12 @@ public class InventoryItem
     public List<MagicOptionInfo> MagicOptions { get; set; }
 
     /// <summary>
+    /// Magic POP coupon metadata. These pairs are protocol data and must not be
+    /// interpreted as equipment alchemy magic options.
+    /// </summary>
+    public List<GachaParameter> GachaParameters { get; set; }
+
+    /// <summary>
     ///     Gets or sets the options.
     /// </summary>
     /// <value>
@@ -327,6 +333,7 @@ public class InventoryItem
         var item = new InventoryItem
         {
             MagicOptions = new List<MagicOptionInfo>(),
+            GachaParameters = new List<GachaParameter>(),
             BindingOptions = new List<BindingOption>(),
             Amount = 1,
             Slot = destinationSlot,
@@ -453,10 +460,7 @@ public class InventoryItem
                 //ITEM_MALL_GACHA_CARD_LOSE
                 var magParamCount = packet.ReadByte();
                 for (var i = 0; i < magParamCount; i++)
-                {
-                    packet.ReadUInt();
-                    packet.ReadUInt();
-                }
+                    item.GachaParameters.Add(GachaParameter.FromPacket(packet));
             }
 
             if (record.IsTrading)

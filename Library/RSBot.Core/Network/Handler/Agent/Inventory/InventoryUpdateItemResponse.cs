@@ -56,12 +56,19 @@ internal class InventoryUpdateItemResponse : IPacketHandler
 
         if (itemUpdateFlag.HasFlag(ItemUpdateFlag.MagParams))
         {
-            item.MagicOptions = new List<MagicOptionInfo>();
-
             var magParamCount = packet.ReadByte();
-
-            for (var i = 0; i < magParamCount; i++)
-                item.MagicOptions.Add(MagicOptionInfo.FromPacket(packet));
+            if (item.Record?.TypeID3 == 14 && item.Record.TypeID4 == 2)
+            {
+                item.GachaParameters = new List<GachaParameter>();
+                for (var i = 0; i < magParamCount; i++)
+                    item.GachaParameters.Add(GachaParameter.FromPacket(packet));
+            }
+            else
+            {
+                item.MagicOptions = new List<MagicOptionInfo>();
+                for (var i = 0; i < magParamCount; i++)
+                    item.MagicOptions.Add(MagicOptionInfo.FromPacket(packet));
+            }
         }
 
         if (itemUpdateFlag.HasFlag(ItemUpdateFlag.Unknown))

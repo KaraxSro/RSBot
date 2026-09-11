@@ -35,7 +35,10 @@ public class Bootstrap : IPlugin
     public bool RequireIngame => false;
 
     /// <inheritdoc />
-    public void Initialize() { }
+    public void Initialize()
+    {
+        PacketCaptureService.Instance.Initialize();
+    }
 
     /// <inheritdoc />
     public Control View => Views.View.Instance;

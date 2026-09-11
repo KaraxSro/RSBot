@@ -232,10 +232,21 @@ public static class PlayerConfig
     /// <param name="file">The file.</param>
     public static void Save()
     {
+        Save(true);
+    }
+
+    /// <summary>
+    /// Saves the player configuration, optionally without the normal log and save event.
+    /// </summary>
+    public static void Save(bool notify)
+    {
         if (_config == null)
             return;
 
         _config.Save();
+
+        if (!notify)
+            return;
 
         Log.Notify("[Player] have been saved!");
         EventManager.FireEvent("OnSavePlayerConfig");

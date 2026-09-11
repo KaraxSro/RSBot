@@ -262,7 +262,6 @@ public partial class Main : DoubleBufferedControl
 
     private void UpdateListViewItem(ListViewItem listViewItem, InventoryItem item)
     {
-        var previousItem = listViewItem.Tag as InventoryItem;
         var name = item.Record?.GetRealName() ?? "";
         if (item.OptLevel > 0)
             name += " (+" + item.OptLevel + ")";
@@ -283,7 +282,7 @@ public partial class Main : DoubleBufferedControl
                 listViewItem.Font = shouldBeBold ? new Font(listViewItem.Font, FontStyle.Bold) : listViewMain.Font;
         }
 
-        if (previousItem?.Record?.CodeName != item.Record.CodeName)
+        if (!string.Equals(listViewItem.ImageKey, item.Record.CodeName, StringComparison.Ordinal))
             listViewItem.LoadItemImageAsync(item.Record);
     }
 

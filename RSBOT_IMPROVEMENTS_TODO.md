@@ -285,6 +285,29 @@ This section is an implementation plan only. Do not change the logging or login 
 
 ## 11. Make autologin a clearly logged state machine
 
+### Intermittent gateway-to-agent transition stall (observed 2026-09-11)
+
+Observed behavior:
+
+- The client starts and the automatic account-login request is sent normally.
+- The gateway accepts the login and RSBot establishes the agentserver connection, but the flow can then stop before `Agent login response received` and before the character list arrives.
+- In the captured failed attempt, the client exited after 37.7 seconds with exit code `0x0`; the automatic restart subsequently completed the same login flow successfully.
+- The configured static captcha had length zero, but the server returned `Captcha entered successfully`, so the empty captcha was not the blocking step in this capture.
+- `SocketException (995)` unobserved-task entries also appeared during the successful attempt. They are therefore most likely shutdown/cancellation noise from retired socket operations, not sufficient evidence of the login stall's root cause.
+
+Planned fix:
+
+- [ ] Start a correlated watchdog when the gateway login is accepted and/or the agentserver connection is established.
+- [ ] Treat `Agent login response received`, character-list receipt, and successful character entry as distinct, timestamped progress checkpoints.
+- [ ] If no agent-login response or character list arrives within a bounded interval (initial proposal: 10–15 seconds), log the exact stalled phase and elapsed time.
+- [ ] Cancel the watchdog immediately when the expected checkpoint arrives, the user logs in manually, the connection closes, the client exits, or a newer login attempt supersedes it.
+- [ ] Recover from a confirmed stall by closing the stale connection/client and scheduling one controlled automatic reconnect instead of waiting indefinitely.
+- [ ] Use an attempt/generation identifier and a single-flight guard so a late packet from the old connection cannot cancel or advance the new attempt and multiple watchdogs cannot launch concurrent clients.
+- [ ] Add a bounded retry count and backoff; after exhaustion, stop retrying and leave one actionable log entry rather than creating a restart loop.
+- [ ] Record the outcome in one summary line: last completed phase, elapsed time, retry number, client PID/launch ID, and whether recovery was automatic.
+- [ ] Separately suppress or downgrade expected socket-abort error `995` when it belongs to a deliberately retired/closed connection, while retaining unexpected socket failures as errors.
+- [ ] Verify failed-first/successful-retry, normal first-attempt login, manual login, gateway queue, clientless login, deliberate client close, and late old-connection packet scenarios.
+
 - [ ] Generate an autologin-attempt ID and link it to the triggering client-launch ID.
 - [ ] Use a consistent prefix such as `[AutoLogin:<id>]` for every related message.
 - [ ] Replace `async void AutoLogin.Handle()` with an awaitable `HandleAsync` flow, or an equivalent observed task with a top-level exception boundary.
