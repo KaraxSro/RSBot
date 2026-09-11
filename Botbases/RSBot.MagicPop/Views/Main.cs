@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using RSBot.Core;
+using RSBot.Core.Client.ReferenceObjects;
 using RSBot.MagicPop.Model;
 using RSBot.MagicPop.References;
 
@@ -391,13 +392,39 @@ internal sealed class Main : UserControl
         if (!string.IsNullOrEmpty(rarity) && rarity != "All")
             rewards = rewards.Where(reward => reward.RarityFilterName == rarity);
 
-        FillGrid(
-            _availableGrid,
-            rewards
+        IOrderedEnumerable<GachaReward> orderedRewards;
+        if (IsClothingCategory(category))
+        {
+            orderedRewards = rewards
+                .OrderBy(GetClothingGenderOrder)
+                .ThenBy(reward => reward.Subtype)
+                .ThenBy(GetRarityOrder)
+                .ThenBy(reward => reward.Name);
+        }
+        else
+        {
+            orderedRewards = rewards
                 .OrderBy(reward => reward.Subtype)
                 .ThenBy(GetRarityOrder)
-                .ThenBy(reward => reward.Name)
-        );
+                .ThenBy(reward => reward.Name);
+        }
+
+        FillGrid(_availableGrid, orderedRewards);
+    }
+
+    private static bool IsClothingCategory(string category)
+    {
+        return category is "Armor" or "Protector" or "Garment" or "Heavy Armor" or "Light Armor" or "Robe";
+    }
+
+    private static int GetClothingGenderOrder(GachaReward reward)
+    {
+        return reward.Item.ReqGender switch
+        {
+            (byte)ObjectGender.Female => 0,
+            (byte)ObjectGender.Male => 1,
+            _ => 2
+        };
     }
 
     private static int GetRarityOrder(GachaReward reward)
@@ -531,7 +558,7 @@ internal sealed class Main : UserControl
         grid.Columns.Add(new DataGridViewTextBoxColumn
         {
             HeaderText = "Time",
-            Width = 135,
+            Width = 160,
             DefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.False }
         });
         grid.Columns.Add(new DataGridViewTextBoxColumn

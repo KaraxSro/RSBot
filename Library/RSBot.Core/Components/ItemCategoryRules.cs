@@ -235,12 +235,12 @@ public static class ItemCategoryRules
             var country = item.TypeID3 <= 3 ? "Chinese" : "European";
             var clothesType = item.TypeID3 switch
             {
-                1 => "Armor",
+                1 => "Garment",
                 2 => "Protector",
-                3 => "Garment",
-                9 => "HeavyArmor",
+                3 => "Armor",
+                9 => "Robe",
                 10 => "LightArmor",
-                11 => "Robe",
+                11 => "HeavyArmor",
                 _ => null,
             };
             var slot = item.TypeID4 switch

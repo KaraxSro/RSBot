@@ -14,7 +14,25 @@ internal sealed class GachaReward
     public RefGachaItemSet Source { get; }
     public RefObjItem Item { get; }
 
-    public string Name => Item.GetRealName(true);
+    public string Name
+    {
+        get
+        {
+            var name = $"{Item.GetRealName()} (D{Degree})";
+            if (EquipmentKey?.StartsWith("Clothes.", System.StringComparison.Ordinal) == true)
+            {
+                name = Item.ReqGender switch
+                {
+                    (byte)ObjectGender.Male => $"{name} (M)",
+                    (byte)ObjectGender.Female => $"{name} (F)",
+                    _ => name
+                };
+            }
+
+            var rarity = RarityFilterName;
+            return string.IsNullOrWhiteSpace(rarity) ? name : $"{name} ({rarity})";
+        }
+    }
     public string CodeName => Item.CodeName;
     public int Degree => Item.Degree;
     public string Rarity => Item.GetRarityName();
