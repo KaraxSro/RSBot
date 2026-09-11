@@ -8,7 +8,7 @@ namespace RSBot.General.Components;
 
 internal static class AgentLoginWatchdog
 {
-    private const int TimeoutMilliseconds = 3_000;
+    private const int TimeoutMilliseconds = 5_000;
     private const int MaximumRecoveryAttempts = 10;
     private static readonly object SyncRoot = new();
 
