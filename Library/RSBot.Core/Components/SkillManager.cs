@@ -347,7 +347,7 @@ public static class SkillManager
     /// <summary>
     ///     Releases and briefly backs off the last request after a server rejection.
     /// </summary>
-    public static void RejectCastRequest()
+    public static void RejectCastRequest(bool cooldownRejected = false)
     {
         uint rejectedSkillId;
         if (_lastRequestWasImbue && _pendingImbueSkillId != 0)
@@ -367,10 +367,29 @@ public static class SkillManager
         if (_retryCombatSkillId == rejectedSkillId)
             ClearCombatRetry();
 
-        var skill = Game.Player?.Skills?.GetSkillInfoById(rejectedSkillId);
-        skill ??= Buffs?.Find(candidate => candidate.Id == rejectedSkillId);
-        skill ??= ImbueSkill?.Id == rejectedSkillId ? ImbueSkill : null;
-        skill?.DeferRetry(CAST_REJECTION_BACKOFF);
+        // A configured buff and the player's learned skill can be separate
+        // SkillInfo instances. Defer every matching instance, otherwise a
+        // cooldown rejection can leave the configured buff immediately
+        // castable and cause a rapid resend loop.
+        var retryDelay = cooldownRejected ? 5_000 : CAST_REJECTION_BACKOFF;
+        var matchingSkills = Buffs?
+            .Where(candidate => candidate.Id == rejectedSkillId)
+            .ToList() ?? new List<SkillInfo>();
+
+        var playerSkill = Game.Player?.Skills?.GetSkillInfoById(rejectedSkillId);
+        if (playerSkill != null)
+            matchingSkills.Add(playerSkill);
+
+        if (ImbueSkill?.Id == rejectedSkillId)
+            matchingSkills.Add(ImbueSkill);
+
+        foreach (var skill in matchingSkills.Distinct())
+        {
+            if (cooldownRejected)
+                skill.SetCoolDown(0);
+
+            skill.DeferRetry(Math.Max(retryDelay, skill.Record.Action_ReuseDelay));
+        }
     }
 
     private static void BeginCastRequest(
@@ -664,9 +683,12 @@ public static class SkillManager
 
         var rarity = MonsterRarity.General;
 
-        if (entity is SpawnedMonster monster)
-            if (Skills[monster.Rarity].Count > 0)
-                rarity = monster.Rarity;
+        // The server can introduce new rarity values before the bot enum is updated.
+        // Treat those as General instead of indexing the dictionary with an unknown key.
+        if (entity is SpawnedMonster monster
+            && Skills.TryGetValue(monster.Rarity, out var monsterSkills)
+            && monsterSkills.Count > 0)
+            rarity = monster.Rarity;
 
         if (_retryCombatSkillId != 0)
         {
@@ -760,7 +782,9 @@ public static class SkillManager
         var entity = Game.SelectedEntity;
         var rarity = MonsterRarity.General;
 
-        if (entity is SpawnedMonster monster && Skills[monster.Rarity].Count > 0)
+        if (entity is SpawnedMonster monster
+            && Skills.TryGetValue(monster.Rarity, out var monsterSkills)
+            && monsterSkills.Count > 0)
             rarity = monster.Rarity;
 
         return Skills[rarity];

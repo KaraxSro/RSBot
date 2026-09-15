@@ -48,7 +48,7 @@ internal class ActionSkillCastResponse : IPacketHandler
                 "CombatTrace"
             );
 
-            SkillManager.RejectCastRequest();
+            SkillManager.RejectCastRequest(errorCode == 0x05);
 
             switch (errorCode)
             {

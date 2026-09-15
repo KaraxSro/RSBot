@@ -33,7 +33,10 @@ internal class GatewayLoginResponse : IPacketHandler
     /// <param name="packet">The packet.</param>
     public void Invoke(Packet packet)
     {
-        if (packet.ReadByte() == 0x01)
+        var result = packet.ReadByte();
+        AutoLogin.CompleteGatewayAttempt();
+
+        if (result == 0x01)
         {
             AutoLogin.RecordState("Gateway login accepted", LogLevel.Notify);
             AgentLoginWatchdog.ObserveGatewayLoginAccepted();

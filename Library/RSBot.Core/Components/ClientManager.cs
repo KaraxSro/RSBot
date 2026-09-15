@@ -25,6 +25,8 @@ public partial class ClientManager
     private static string _launchPhase = "idle";
     private static DateTime _launchStarted;
     private static bool _intentionalExit;
+    private static string _isroDsoundProxyPath;
+    private static bool _ownsIsroDsoundProxy;
     public static string CurrentLaunchId => _launchId;
     private static readonly string GitHubSignatureUrl =
         "https://raw.githubusercontent.com/myildirimofficial/rsbot/master/client-signatures.cfg";
@@ -149,6 +151,7 @@ public partial class ClientManager
         var contentId = Game.ReferenceManager.DivisionInfo.Locale;
 
         var args = BuildCommandLineArguments(contentId, divisionIndex, gatewayIndex);
+        var useIsroDsoundProxy = Game.ClientType == GameClientType.Global;
 
         LogLaunchFileMetadata("client", path);
         LogLaunchFileMetadata("loader", fullPath);
@@ -185,6 +188,12 @@ public partial class ClientManager
                 return false;
             }
 
+            if (useIsroDsoundProxy && !PrepareIsroDsoundProxy(fullPath, silkroadDirectory))
+            {
+                CleanupProcess(pi);
+                return false;
+            }
+
             var sroProcess = Process.GetProcessById((int)pi.dwProcessId);
 
             if (RequiresXigncodePatch(Game.ClientType) && !await ApplyXigncodePatch(sroProcess, pi))
@@ -198,8 +207,11 @@ public partial class ClientManager
             _process.Exited += ClientProcess_Exited;
             SetLaunchPhase("monitoring", $"Client exit monitoring registered before resume; pid={pi.dwProcessId}");
 
-            SetLaunchPhase("injecting", "Injecting Client.Library.dll");
-            if (!InjectClientLibrary(pi, buffer, pathLen))
+            if (useIsroDsoundProxy)
+            {
+                SetLaunchPhase("injecting", "iSRO: loading Client.Library.dll through the DirectSound proxy");
+            }
+            else if (!InjectClientLibrary(pi, buffer, pathLen))
             {
                 CleanupProcess(pi);
                 return false;
@@ -235,6 +247,7 @@ public partial class ClientManager
         {
             LaunchError($"Failed to start client: {ex}");
             CleanupProcess(pi);
+            CleanupIsroDsoundProxy();
             return false;
         }
     }
@@ -498,6 +511,7 @@ public partial class ClientManager
         Log.Warn($"[ClientLaunch:{_launchId}] Client process exited; exitCode={exitCode}; lifetime={lifetime.TotalSeconds:F1}s; phase={_launchPhase}; intentional={_intentionalExit}");
         if (!_intentionalExit && lifetime < TimeSpan.FromMinutes(1))
             _ = Task.Run(() => LogRecentWindowsCrashEvidence(processId));
+        CleanupIsroDsoundProxy();
         EventManager.FireEvent("OnExitClient");
     }
 
@@ -696,6 +710,75 @@ public partial class ClientManager
         {
             LaunchError($"Failed to prepare temporary loader configuration: {ex.Message}");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Prepares the loader as a DirectSound proxy for the official iSRO client.
+    /// The official client loads DirectSound during its own initialization, avoiding the
+    /// early remote LoadLibrary injection used by the other client types.
+    /// </summary>
+    private static bool PrepareIsroDsoundProxy(string loaderPath, string silkroadDirectory)
+    {
+        var proxyPath = Path.Combine(silkroadDirectory, "dsound.dll");
+
+        try
+        {
+            if (File.Exists(proxyPath))
+            {
+                if (!FilesAreIdentical(loaderPath, proxyPath))
+                {
+                    LaunchError($"iSRO DirectSound proxy already exists and is not the RSBot loader: {proxyPath}");
+                    return false;
+                }
+
+                SetLaunchPhase("loader-proxy", "Reusing the existing iSRO DirectSound loader proxy");
+                return true;
+            }
+
+            File.Copy(loaderPath, proxyPath, false);
+            _isroDsoundProxyPath = proxyPath;
+            _ownsIsroDsoundProxy = true;
+            SetLaunchPhase("loader-proxy", "iSRO DirectSound loader proxy prepared");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            LaunchError($"Could not prepare the iSRO DirectSound loader proxy: {exception.Message}");
+            return false;
+        }
+    }
+
+    private static bool FilesAreIdentical(string firstPath, string secondPath)
+    {
+        var first = new FileInfo(firstPath);
+        var second = new FileInfo(secondPath);
+        if (first.Length != second.Length)
+            return false;
+
+        using var firstStream = File.OpenRead(firstPath);
+        using var secondStream = File.OpenRead(secondPath);
+        return SHA256.HashData(firstStream).SequenceEqual(SHA256.HashData(secondStream));
+    }
+
+    private static void CleanupIsroDsoundProxy()
+    {
+        if (!_ownsIsroDsoundProxy || string.IsNullOrEmpty(_isroDsoundProxyPath))
+            return;
+
+        try
+        {
+            File.Delete(_isroDsoundProxyPath);
+            Log.Debug($"Removed the iSRO DirectSound loader proxy: {_isroDsoundProxyPath}");
+        }
+        catch (Exception exception)
+        {
+            Log.Warn($"Could not remove the iSRO DirectSound loader proxy: {exception.Message}");
+        }
+        finally
+        {
+            _isroDsoundProxyPath = null;
+            _ownsIsroDsoundProxy = false;
         }
     }
 

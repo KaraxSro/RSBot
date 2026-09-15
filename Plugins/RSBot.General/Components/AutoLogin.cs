@@ -27,11 +27,26 @@ internal static class AutoLogin
     ///     Is the auto login handling <c>true</c> otherwise; <c>false</c>
     /// </summary>
     private static int _busy;
+    private static int _awaitingGatewayResponse;
     private static string _attemptId = "none";
 
     internal static void RecordState(string message, LogLevel level = LogLevel.Debug)
     {
         Log.Append(level, $"[AutoLogin:{_attemptId}] {message}", "AutoLogin", _attemptId);
+    }
+
+    /// <summary>
+    /// Releases the active automatic-login attempt after the gateway has replied.
+    /// Keeping the attempt active until this point prevents duplicate server-list packets
+    /// from submitting the same credentials more than once.
+    /// </summary>
+    internal static void CompleteGatewayAttempt()
+    {
+        if (Interlocked.Exchange(ref _awaitingGatewayResponse, 0) == 0)
+            return;
+
+        Interlocked.Exchange(ref _busy, 0);
+        Log.Debug($"[AutoLogin:{_attemptId}] Gateway response received; attempt is ready for the next trigger");
     }
 
     /// <summary>
@@ -62,6 +77,7 @@ internal static class AutoLogin
 
         _attemptId = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         var started = Stopwatch.GetTimestamp();
+        var awaitingGatewayResponse = false;
         Log.Notify($"[AutoLogin:{_attemptId}] Attempt started; trigger={trigger}; clientLaunch={ClientManager.CurrentLaunchId ?? "none"}");
         Log.StatusLang("WaitingUser");
 
@@ -132,16 +148,22 @@ internal static class AutoLogin
                 }
             }
 
+            Interlocked.Exchange(ref _awaitingGatewayResponse, 1);
+            awaitingGatewayResponse = true;
             SendLoginRequest(selectedAccount, server);
         }
         catch (Exception exception)
         {
+            Interlocked.Exchange(ref _awaitingGatewayResponse, 0);
+            awaitingGatewayResponse = false;
             Log.Error($"[AutoLogin:{_attemptId}] Unexpected failure: {exception}");
         }
         finally
         {
-            Interlocked.Exchange(ref _busy, 0);
-            Log.Notify($"[AutoLogin:{_attemptId}] Flow ended; duration={Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s; pending={Pending}");
+            if (!awaitingGatewayResponse)
+                Interlocked.Exchange(ref _busy, 0);
+
+            Log.Notify($"[AutoLogin:{_attemptId}] Flow ended; duration={Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s; pending={Pending}; awaitingGatewayResponse={awaitingGatewayResponse}");
         }
     }
 
