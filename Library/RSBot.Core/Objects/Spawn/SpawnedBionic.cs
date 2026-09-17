@@ -98,6 +98,15 @@ public class SpawnedBionic : SpawnedEntity
     }
 
     /// <summary>
+    ///     Clears transient combat-targeting data used by bot decision logic.
+    /// </summary>
+    public void ResetCombatTargetingState()
+    {
+        AttackingPlayer = false;
+        TargetId = 0;
+    }
+
+    /// <summary>
     ///     Handles the Elapsed event of the Timer control.
     /// </summary>
     /// <param name="sender">The source of the event.</param>

@@ -229,7 +229,11 @@ internal sealed class MagicPopBot
         else
             Container.AppendDiagnostic("Hotan return point confirmed; already running clientless.");
 
-        SetState(MagicPopRunState.BuyingCards);
+        StartRoute(
+            MagicPopScriptPaths.TeleportToMachine,
+            MagicPopRunState.MovingToMachine,
+            MagicPopRunState.OpeningMachine
+        );
     }
 
     private void TickBuyingCards()
@@ -246,8 +250,9 @@ internal sealed class MagicPopBot
                 Log.Notify($"[Magic POP] Purchased {purchasedQuantity} card(s); inventory update confirmed.");
                 Container.AppendDiagnostic(
                     $"Purchased {purchasedQuantity} card(s); inventory update confirmed. " +
-                    $"Waiting {MinimumPurchaseInterval.TotalMilliseconds:0} ms before the next purchase."
+                    $"Starting its roll after {MinimumPurchaseInterval.TotalMilliseconds:0} ms."
                 );
+                SetState(MagicPopRunState.Rolling);
                 return;
             }
 
@@ -264,6 +269,22 @@ internal sealed class MagicPopBot
 
         if (DateTime.UtcNow < _nextPurchaseUtc)
             return;
+
+        if (!_atMachine)
+        {
+            StartRoute(
+                _atPotionShop ? MagicPopScriptPaths.PotionToMachine : MagicPopScriptPaths.TeleportToMachine,
+                _atPotionShop ? MagicPopRunState.ReturningToMachine : MagicPopRunState.MovingToMachine,
+                MagicPopRunState.OpeningMachine
+            );
+            return;
+        }
+
+        if (FindCard() != null)
+        {
+            SetState(MagicPopRunState.Rolling);
+            return;
+        }
 
         var balance = Container.SilkBalance.Current;
         if (_purchasesAvailable && Game.Player.Inventory.FreeSlots > 0 && balance?.Silk > 0)
@@ -287,16 +308,6 @@ internal sealed class MagicPopBot
         else if (balance.Silk == 0)
             Log.Notify("[Magic POP] Silk is exhausted; continuing without further purchases.");
 
-        if (FindCard() != null)
-        {
-            StartRoute(
-                _atPotionShop ? MagicPopScriptPaths.PotionToMachine : MagicPopScriptPaths.TeleportToMachine,
-                _atPotionShop ? MagicPopRunState.ReturningToMachine : MagicPopRunState.MovingToMachine,
-                MagicPopRunState.OpeningMachine
-            );
-            return;
-        }
-
         BeginCleanupOrFinish();
     }
 
@@ -305,7 +316,7 @@ internal sealed class MagicPopBot
         if (_task == null)
         {
             _task = Task.Run(OpenMachine);
-            _taskSuccessState = MagicPopRunState.Rolling;
+            _taskSuccessState = MagicPopRunState.BuyingCards;
             return;
         }
 
@@ -417,7 +428,8 @@ internal sealed class MagicPopBot
 
     private void BeginCleanupOrFinish()
     {
-        if (FindLosingCoupon() != null)
+        var canBuyMoreCards = CanBuyMoreCards();
+        if ((_targets.Count == 0 || !canBuyMoreCards) && FindLosingCoupon() != null)
         {
             if (_atPotionShop)
             {
@@ -451,9 +463,9 @@ internal sealed class MagicPopBot
         }
 
 
-        if (CanBuyMoreCards())
+        if (canBuyMoreCards)
         {
-            Log.Notify("[Magic POP] Cards are exhausted; returning to card purchase for the remaining targets.");
+            Log.Notify("[Magic POP] Card consumed; buying one replacement for the remaining targets.");
             SetState(MagicPopRunState.BuyingCards);
             return;
         }
@@ -901,7 +913,7 @@ internal sealed class MagicPopBot
     private string GetResourceExhaustionReason()
     {
         if (Game.Player?.Inventory?.FreeSlots == 0)
-            return "[Magic POP] Stopped: no cards or losing coupons remain, and the inventory has no free slot for another card.";
+            return "[Magic POP] Stopped: no cards remain and the full inventory contains no losing coupons to sell.";
         if (!_purchasesAvailable)
             return "[Magic POP] Stopped: no cards remain and automatic card purchase is unavailable for this run.";
 

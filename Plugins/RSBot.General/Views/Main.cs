@@ -344,8 +344,10 @@ internal partial class Main : DoubleBufferedControl
         if (useReturnScroll)
             Game.Player.UseReturnScroll();
 
-        if (startBot)
+        if (startBot && Kernel.Bot?.Botbase?.Name != "RSBot.MagicPop")
             Kernel.Bot.Start();
+        else if (startBot)
+            Log.Notify("[General] Auto start is disabled for Magic POP; start the Magic POP run manually.");
     }
 
     /// <summary>

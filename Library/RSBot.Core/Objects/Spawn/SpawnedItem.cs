@@ -1,10 +1,16 @@
-﻿using RSBot.Core.Client.ReferenceObjects;
+﻿using System;
+using System.Threading;
+using RSBot.Core.Client.ReferenceObjects;
+using RSBot.Core.Components;
 using RSBot.Core.Network;
 
 namespace RSBot.Core.Objects.Spawn;
 
 public class SpawnedItem : SpawnedEntity
 {
+    private const int PickupCompletionTimeout = 5_000;
+    private const int ItemDisappearanceGracePeriod = 250;
+
     /// <summary>
     ///     Gets or sets the amount.
     /// </summary>
@@ -109,6 +115,7 @@ public class SpawnedItem : SpawnedEntity
         packet.WriteByte(ActionTarget.Entity);
         packet.WriteUInt(UniqueId);
 
+        var pickupStarted = 0;
         var asyncResult = new AwaitCallback(
             response =>
             {
@@ -117,7 +124,13 @@ public class SpawnedItem : SpawnedEntity
 
                 Log.Debug($"Picked up item response: State={actionState} Repeat={repeatAction}");
 
-                return actionState is ActionState.Begin or ActionState.End
+                if (actionState == ActionState.Begin)
+                {
+                    Interlocked.Exchange(ref pickupStarted, 1);
+                    return AwaitCallbackResult.ConditionFailed;
+                }
+
+                return actionState == ActionState.End && Volatile.Read(ref pickupStarted) == 1
                     ? AwaitCallbackResult.Success
                     : AwaitCallbackResult.ConditionFailed;
             },
@@ -126,7 +139,34 @@ public class SpawnedItem : SpawnedEntity
 
         Log.Status("Picking up...");
         PacketManager.SendPacket(packet, PacketDestination.Server, asyncResult);
-        asyncResult.AwaitResponse(500);
+        var waitStarted = Environment.TickCount64;
+        long itemDisappearedAt = 0;
+        while (!asyncResult.IsClosed && Environment.TickCount64 - waitStarted < PickupCompletionTimeout)
+        {
+            if (Volatile.Read(ref pickupStarted) == 1 && !SpawnManager.TryGetEntity<SpawnedItem>(UniqueId, out _))
+            {
+                itemDisappearedAt = itemDisappearedAt == 0 ? Environment.TickCount64 : itemDisappearedAt;
+
+                if (Environment.TickCount64 - itemDisappearedAt >= ItemDisappearanceGracePeriod)
+                {
+                    Log.Debug($"[Pickup] Item {UniqueId} disappeared before its pickup action ended.");
+                    asyncResult.Fail();
+                    break;
+                }
+            }
+            else
+            {
+                itemDisappearedAt = 0;
+            }
+
+            Thread.Sleep(10);
+        }
+
+        if (!asyncResult.IsClosed)
+        {
+            Log.Debug($"[Pickup] Timed out waiting for pickup action to end for item {UniqueId}.");
+            asyncResult.Fail();
+        }
         Log.StatusLang("Ready");
 
         return asyncResult.IsCompleted;

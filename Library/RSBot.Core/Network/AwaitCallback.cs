@@ -117,11 +117,24 @@ public class AwaitCallback
     public bool IsClosed => _timeout || _invoked;
 
     /// <summary>
+    ///     Closes this callback without marking it as successful.
+    /// </summary>
+    public void Fail()
+    {
+        _succeeded = false;
+        _invoked = true;
+        _completionSource.TrySetResult(false);
+    }
+
+    /// <summary>
     ///     Invokes this <see cref="AwaitCallback" /> instance.
     /// </summary>
     /// <param name="packet">The received <see cref="Packet" />.</param>
     internal void Invoke(Packet packet)
     {
+        if (IsClosed)
+            return;
+
         if (_predicate == null)
         {
             _succeeded = true;

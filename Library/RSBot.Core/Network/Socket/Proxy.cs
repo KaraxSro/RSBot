@@ -1,11 +1,14 @@
 ﻿using System;
 using System.IO;
+using System.Threading;
 using RSBot.Core.Event;
 
 namespace RSBot.Core.Network;
 
 public class Proxy
 {
+    private const int AGENT_RECEIVE_TIMEOUT = 60_000;
+    private const int AGENT_RECEIVE_WATCH_INTERVAL = 5_000;
     /// <summary>
     ///     Gets a value indicating whether [client connected].
     /// </summary>
@@ -85,6 +88,8 @@ public class Proxy
     /// </summary>
     public void Shutdown()
     {
+        StopAgentReceiveWatchdog();
+
         Client?.Shutdown();
         Client = null;
 
@@ -202,6 +207,8 @@ public class Proxy
     private ushort _agentPort;
     private string _gatewayIp;
     private ushort _gatewayPort;
+    private Timer _agentReceiveWatchdog;
+    private long _agentLastReceivedTick;
 
     #endregion Fields
 
@@ -261,6 +268,9 @@ public class Proxy
             return;
         }
 
+        if (IsConnectedToAgentserver)
+            Volatile.Write(ref _agentLastReceivedTick, Environment.TickCount64);
+
         HandleReceivedPacket(packet, PacketDestination.Client);
 
         EventManager.FireEvent("OnServerPacketReceive", packet);
@@ -293,6 +303,7 @@ public class Proxy
         if (IsConnectedToAgentserver)
         {
             Log.Warn("Disconnected from game server!");
+            StopAgentReceiveWatchdog();
 
             IsConnectedToAgentserver = false;
 
@@ -325,7 +336,42 @@ public class Proxy
         if (IsConnectedToGatewayserver)
             EventManager.FireEvent("OnGatewayServerConntected");
         else if (IsConnectedToAgentserver)
+        {
+            StartAgentReceiveWatchdog(source);
             EventManager.FireEvent("OnAgentServerConnected");
+        }
+    }
+
+    private void StartAgentReceiveWatchdog(Server source)
+    {
+        StopAgentReceiveWatchdog();
+        Volatile.Write(ref _agentLastReceivedTick, Environment.TickCount64);
+        _agentReceiveWatchdog = new Timer(
+            _ => CheckAgentReceiveLiveness(source),
+            null,
+            AGENT_RECEIVE_WATCH_INTERVAL,
+            AGENT_RECEIVE_WATCH_INTERVAL
+        );
+    }
+
+    private void StopAgentReceiveWatchdog()
+    {
+        _agentReceiveWatchdog?.Dispose();
+        _agentReceiveWatchdog = null;
+        Volatile.Write(ref _agentLastReceivedTick, 0);
+    }
+
+    private void CheckAgentReceiveLiveness(Server source)
+    {
+        if (!ReferenceEquals(source, Server) || !IsConnectedToAgentserver || !Game.Ready)
+            return;
+
+        var elapsed = Environment.TickCount64 - Volatile.Read(ref _agentLastReceivedTick);
+        if (elapsed < AGENT_RECEIVE_TIMEOUT)
+            return;
+
+        Log.Warn($"Agent server has been silent for {elapsed / 1000}s; disconnecting the stale connection.");
+        source.Disconnect();
     }
 
     #endregion Server

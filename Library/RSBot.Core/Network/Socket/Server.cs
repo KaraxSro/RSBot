@@ -113,7 +113,8 @@ public class Server : NetBase
             receivedSize = _socket.EndReceive(ar, out var error);
             if (receivedSize == 0 || error != SocketError.Success)
             {
-                OnDisconnected();
+                Log.Warn($"Server receive closed [bytes={receivedSize}, error={error}].");
+                Disconnect();
                 return;
             }
 
@@ -121,13 +122,18 @@ public class Server : NetBase
         }
         catch (SocketException se)
         {
-            if (se.SocketErrorCode == SocketError.ConnectionReset) //Client OnDisconnected > Mostly occurs during GW->AS switch
-                OnDisconnected();
+            Log.Warn($"Server receive failed [{se.SocketErrorCode}]: {se.Message}");
+            Disconnect();
         }
         catch (HandshakeSecurityException)
         {
             Log.Notify("[Fatal]: Could not handshake the client, restarting client process now...");
             Game.Start();
+        }
+        catch (Exception exception)
+        {
+            Log.Error($"Server receive processing failed: {exception.Message}");
+            Disconnect();
         }
         finally
         {

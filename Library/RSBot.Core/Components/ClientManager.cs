@@ -724,22 +724,10 @@ public partial class ClientManager
 
         try
         {
-            if (File.Exists(proxyPath))
-            {
-                if (!FilesAreIdentical(loaderPath, proxyPath))
-                {
-                    LaunchError($"iSRO DirectSound proxy already exists and is not the RSBot loader: {proxyPath}");
-                    return false;
-                }
-
-                SetLaunchPhase("loader-proxy", "Reusing the existing iSRO DirectSound loader proxy");
-                return true;
-            }
-
-            File.Copy(loaderPath, proxyPath, false);
+            File.Copy(loaderPath, proxyPath, true);
             _isroDsoundProxyPath = proxyPath;
             _ownsIsroDsoundProxy = true;
-            SetLaunchPhase("loader-proxy", "iSRO DirectSound loader proxy prepared");
+            SetLaunchPhase("loader-proxy", "iSRO DirectSound loader proxy refreshed");
             return true;
         }
         catch (Exception exception)
@@ -747,18 +735,6 @@ public partial class ClientManager
             LaunchError($"Could not prepare the iSRO DirectSound loader proxy: {exception.Message}");
             return false;
         }
-    }
-
-    private static bool FilesAreIdentical(string firstPath, string secondPath)
-    {
-        var first = new FileInfo(firstPath);
-        var second = new FileInfo(secondPath);
-        if (first.Length != second.Length)
-            return false;
-
-        using var firstStream = File.OpenRead(firstPath);
-        using var secondStream = File.OpenRead(secondPath);
-        return SHA256.HashData(firstStream).SequenceEqual(SHA256.HashData(secondStream));
     }
 
     private static void CleanupIsroDsoundProxy()

@@ -271,6 +271,15 @@ internal class TargetBundle : IBundle
     public void Stop()
     {
         _blacklist = null;
+
+        // A manual stop is an explicit break from the previous combat situation.
+        // Keep the live spawn list, but discard target/attacker flags that may have
+        // become stale while the player was moved manually.
+        if (SpawnManager.TryGetEntities<SpawnedMonster>(_ => true, out var monsters))
+        {
+            foreach (var monster in monsters)
+                monster.ResetCombatTargetingState();
+        }
     }
 
     #endregion Methods

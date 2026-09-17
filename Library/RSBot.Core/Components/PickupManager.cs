@@ -155,6 +155,9 @@ public class PickupManager
                 if (Game.Player.InAction || !RunningPlayerPickup)
                     return;
 
+                if (!SpawnManager.TryGetEntity<SpawnedItem>(item.UniqueId, out _))
+                    continue;
+
                 if (item.Record.IsSpecialtyGoodBox && Game.Player.Job2SpecialtyBag.Full)
                     continue;
 
